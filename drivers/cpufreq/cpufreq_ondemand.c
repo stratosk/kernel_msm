@@ -71,10 +71,10 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 static
 #endif
 struct cpufreq_governor cpufreq_gov_ondemand = {
-       .name                   = "ondemand",
-       .governor               = cpufreq_governor_dbs,
-       .max_transition_latency = TRANSITION_LATENCY_LIMIT,
-       .owner                  = THIS_MODULE,
+	.name                   = "ondemand",
+	.governor               = cpufreq_governor_dbs,
+	.max_transition_latency = TRANSITION_LATENCY_LIMIT,
+	.owner                  = THIS_MODULE,
 };
 
 /* Sampling types */
@@ -120,7 +120,7 @@ static DEFINE_PER_CPU(struct work_struct, dbs_refresh_work);
 static struct dbs_tuners {
 	unsigned int sampling_rate;
 	unsigned int up_threshold;
-	unsigned int down_differential;
+	unsigned int adj_up_threshold;
 	unsigned int ignore_nice;
 	unsigned int sampling_down_factor;
 	int          powersave_bias;
@@ -128,7 +128,8 @@ static struct dbs_tuners {
 } dbs_tuners_ins = {
 	.up_threshold = DEF_FREQUENCY_UP_THRESHOLD,
 	.sampling_down_factor = DEF_SAMPLING_DOWN_FACTOR,
-	.down_differential = DEF_FREQUENCY_DOWN_DIFFERENTIAL,
+	.adj_up_threshold = DEF_FREQUENCY_UP_THRESHOLD -
+			    DEF_FREQUENCY_DOWN_DIFFERENTIAL,
 	.ignore_nice = 0,
 	.powersave_bias = 0,
 };
@@ -288,7 +289,6 @@ static ssize_t show_##file_name						\
 show_one(sampling_rate, sampling_rate);
 show_one(io_is_busy, io_is_busy);
 show_one(up_threshold, up_threshold);
-show_one(down_differential, down_differential);
 show_one(sampling_down_factor, sampling_down_factor);
 show_one(ignore_nice_load, ignore_nice);
 
@@ -390,24 +390,11 @@ static ssize_t store_up_threshold(struct kobject *a, struct attribute *b,
 			input < MIN_FREQUENCY_UP_THRESHOLD) {
 		return -EINVAL;
 	}
+	/* Calculate the new adj_up_threshold */
+	dbs_tuners_ins.adj_up_threshold += input;
+	dbs_tuners_ins.adj_up_threshold -= dbs_tuners_ins.up_threshold;
+
 	dbs_tuners_ins.up_threshold = input;
-	return count;
-}
-
-static ssize_t store_down_differential(struct kobject *a, struct attribute *b,
-		const char *buf, size_t count)
-{
-	unsigned int input;
-	int ret;
-	ret = sscanf(buf, "%u", &input);
-
-	if (ret != 1 || input >= dbs_tuners_ins.up_threshold ||
-			input < MIN_FREQUENCY_DOWN_DIFFERENTIAL) {
-		return -EINVAL;
-	}
-
-	dbs_tuners_ins.down_differential = input;
-
 	return count;
 }
 
@@ -572,7 +559,6 @@ skip_this_cpu_bypass:
 define_one_global_rw(sampling_rate);
 define_one_global_rw(io_is_busy);
 define_one_global_rw(up_threshold);
-define_one_global_rw(down_differential);
 define_one_global_rw(sampling_down_factor);
 define_one_global_rw(ignore_nice_load);
 define_one_global_rw(powersave_bias);
@@ -581,7 +567,6 @@ static struct attribute *dbs_attributes[] = {
 	&sampling_rate_min.attr,
 	&sampling_rate.attr,
 	&up_threshold.attr,
-	&down_differential.attr,
 	&sampling_down_factor.attr,
 	&ignore_nice_load.attr,
 	&powersave_bias.attr,
@@ -725,13 +710,9 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	 * can support the current CPU usage without triggering the up
 	 * policy. To be safe, we focus 10 points under the threshold.
 	 */
-	if (max_load_freq <
-	    (dbs_tuners_ins.up_threshold - dbs_tuners_ins.down_differential) *
-	     policy->cur) {
+	if (max_load_freq < dbs_tuners_ins.adj_up_threshold * policy->cur) {
 		unsigned int freq_next;
-		freq_next = max_load_freq /
-				(dbs_tuners_ins.up_threshold -
-				 dbs_tuners_ins.down_differential);
+		freq_next = max_load_freq / dbs_tuners_ins.adj_up_threshold;
 
 		/* No longer fully busy, reset rate_mult */
 		this_dbs_info->rate_mult = 1;
@@ -1050,8 +1031,9 @@ static int __init cpufreq_gov_dbs_init(void)
 	if (idle_time != -1ULL) {
 		/* Idle micro accounting is supported. Use finer thresholds */
 		dbs_tuners_ins.up_threshold = MICRO_FREQUENCY_UP_THRESHOLD;
-		dbs_tuners_ins.down_differential =
-					MICRO_FREQUENCY_DOWN_DIFFERENTIAL;
+		dbs_tuners_ins.adj_up_threshold = MICRO_FREQUENCY_UP_THRESHOLD -
+						  MICRO_FREQUENCY_DOWN_DIFFERENTIAL;
+
 		/*
 		 * In nohz/micro accounting case we set the minimum frequency
 		 * not depending on HZ, but fixed (very low). The deferred
