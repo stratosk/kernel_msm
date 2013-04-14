@@ -416,6 +416,11 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		return;
 	}
 
+	/* if sampling_down_factor is active break out early */
+	if (++this_dbs_info->down_skip < dbs_tuners_ins.sampling_down_factor)
+		return;
+	this_dbs_info->down_skip = 0;
+
 	/*
 	 * The optimal frequency is the frequency that is the lowest that
 	 * can support the current CPU usage without triggering the up
