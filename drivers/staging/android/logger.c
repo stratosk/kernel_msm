@@ -68,6 +68,8 @@ static LIST_HEAD(log_list);
  * @log:	The associated log
  * @list:	The associated entry in @logger_log's list
  * @r_off:	The current read head offset.
+ * @r_all:	Reader can read all entries
+ * @r_ver:	Reader ABI version
  *
  * This object lives from open to release, so we don't need additional
  * reference counting. The structure is protected by log->mutex.
@@ -76,6 +78,8 @@ struct logger_reader {
 	struct logger_log	*log;
 	struct list_head	list;
 	size_t			r_off;
+	bool			r_all;
+	int			r_ver;
 };
 
 /* logger_offset - returns index 'n' into the log via (optimized) modulus */
@@ -736,8 +740,8 @@ static const struct file_operations logger_fops = {
 };
 
 /*
- * Log size must be a power of two, greater than LOGGER_ENTRY_MAX_LEN,
- * and less than LONG_MAX minus LOGGER_ENTRY_MAX_LEN.
+ * Log size must must be a power of two, and greater than
+ * (LOGGER_ENTRY_MAX_PAYLOAD + sizeof(struct logger_entry)).
  */
 static int __init create_log(char *log_name, int size)
 {
