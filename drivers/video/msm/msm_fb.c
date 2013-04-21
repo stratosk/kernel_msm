@@ -920,6 +920,10 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 			if (ret == 0) {
 				mfd->panel_power_on = TRUE;
 				mfd->panel_driver_on = mfd->op_enable;
+#ifdef CONFIG_UPDATE_LCDC_LUT
+			        if (msm_fb_pdata->update_lcdc_lut)
+                			msm_fb_pdata->update_lcdc_lut();
+#endif
 			}
 		}
 		break;
