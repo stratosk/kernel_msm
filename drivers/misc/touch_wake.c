@@ -7,6 +7,7 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
+#define DEBUG
 #include <linux/init.h>
 #include <linux/device.h>
 #include <linux/miscdevice.h>
@@ -18,9 +19,10 @@
 #include <linux/wakelock.h>
 #include <linux/input.h>
 #include <linux/module.h> 
+#include <linux/jiffies.h>
 
 #define TIME_LONGPRESS 		(500)
-#define POWERPRESS_DELAY	(100)
+#define POWERPRESS_DELAY	(40)
 #define POWERPRESS_TIMEOUT	(1000)
 #define DEF_TOUCHOFF_DELAY	(45000);
 
@@ -32,16 +34,21 @@ static bool touchwake_enabled = false;
 static bool touch_disabled = false;
 static bool device_suspended = false;
 static bool timed_out = true;
-static bool radio_on = false;
 static unsigned int touchoff_delay = DEF_TOUCHOFF_DELAY;
+static unsigned int powerkey_flag = 0;
 
 extern void touchscreen_enable(void);
 extern void touchscreen_disable(void);
 
+/*struct presspower_work {
+	struct work_struct *ws;
+	int powerkey_flag;
+} pwork;
+*/
 static void touchwake_touchoff(struct work_struct * touchoff_work);
 static DECLARE_DELAYED_WORK(touchoff_work, touchwake_touchoff);
-static void press_powerkey(struct work_struct * presspower_work);
-static DECLARE_WORK(presspower_work, press_powerkey);
+static void press_powerkey(struct work_struct *ws);
+static DECLARE_DELAYED_WORK(presspower_work, press_powerkey);
 static DEFINE_MUTEX(lock);
 
 static void touchwake_disable_touch(void)
@@ -71,7 +78,6 @@ static void touchwake_early_suspend(struct early_suspend * h)
 	} else
 		touchwake_disable_touch();
 
-	mdelay(POWERPRESS_TIMEOUT);
 	device_suspended = true;
 	return;
 }
@@ -106,23 +112,36 @@ static void touchwake_touchoff(struct work_struct * touchoff_work)
 	return;
 }
 
-static void press_powerkey(struct work_struct * presspower_work)
+static void press_powerkey(struct work_struct *ws)
 {
-	pr_debug("%s: starting\n", __func__);
-	input_report_key(powerkey_device, KEY_POWER, 1);
-	input_sync(powerkey_device);
-	mdelay(POWERPRESS_DELAY);
+	unsigned long delay;
 
-	pr_debug("%s: power up\n", __func__);
-	input_report_key(powerkey_device, KEY_POWER, 0);
-	input_sync(powerkey_device);
-	mdelay(POWERPRESS_DELAY);
+	if (powerkey_flag == 0) {
+		pr_debug("%s: power key down\n", __func__);
+		input_report_key(powerkey_device, KEY_POWER, 1);
+		input_sync(powerkey_device);
+		powerkey_flag = 1;
 
-	mdelay(POWERPRESS_TIMEOUT);
-
-	pr_debug("%s: before mutex\n", __func__);
-	mutex_unlock(&lock);
-	return;
+		delay = msecs_to_jiffies(POWERPRESS_DELAY);
+		schedule_delayed_work(&presspower_work, delay);
+	} else if (powerkey_flag == 1) {
+		pr_debug("%s: power key up\n", __func__);
+		input_report_key(powerkey_device, KEY_POWER, 0);
+		input_sync(powerkey_device);
+		powerkey_flag = 2;
+		
+		delay = msecs_to_jiffies(POWERPRESS_DELAY);
+		schedule_delayed_work(&presspower_work, delay);
+	} else if (powerkey_flag == 2) {
+		powerkey_flag = 3;
+		pr_debug("%s: delay\n", __func__);
+		delay= msecs_to_jiffies(POWERPRESS_TIMEOUT);
+		schedule_delayed_work(&presspower_work, delay);
+	} else if (powerkey_flag == 3) {
+		powerkey_flag = 0;
+		pr_debug("%s: release mutex\n", __func__);
+		mutex_unlock(&lock);
+	}
 }
 
 static ssize_t touchwake_status_read(struct device * dev,
@@ -204,19 +223,6 @@ static struct miscdevice touchwake_device =
 	.name = "touchwake",
 };
 
-void radio_wake_lock(unsigned int onoff)
-{
-	return;
-	if (onoff) {
-		timed_out = false;
-		radio_on = true;
-	} else {
-		timed_out = true;
-		radio_on = false;
-	}
-}
-EXPORT_SYMBOL(radio_wake_lock);
-
 void powerkey_pressed(void)
 {
 	do_gettimeofday(&last_powerkeypress);
@@ -235,8 +241,10 @@ void powerkey_released(void)
 	time_pressed = (now.tv_sec - last_powerkeypress.tv_sec) * MSEC_PER_SEC +
 		(now.tv_usec - last_powerkeypress.tv_usec) / USEC_PER_MSEC;
 
-	if (time_pressed < TIME_LONGPRESS)
+	if (time_pressed > POWERPRESS_DELAY && time_pressed < TIME_LONGPRESS) {
 		timed_out = false;
+		pr_debug("%s: timed_out false: %d", __func__, time_pressed);
+	}
 
 	return;
 }
@@ -244,9 +252,11 @@ EXPORT_SYMBOL(powerkey_released);
 
 void touch_press(void)
 {
+	unsigned long delay = 10;
+
 	pr_debug("%s: touch pressed\n", __func__); 
-	if (touchwake_enabled && device_suspended && !radio_on && mutex_trylock(&lock))
-		schedule_work(&presspower_work);
+	if (touchwake_enabled && device_suspended && mutex_trylock(&lock))
+		schedule_delayed_work(&presspower_work, delay);
 
 	return;
 }
@@ -293,6 +303,9 @@ static int __init touchwake_control_init(void)
 
 	do_gettimeofday(&last_powerkeypress);
 
+	powerkey_flag = 0;
+//        INIT_WORK(pwork.ws, press_powerkey);
+	
 	return 0;
 }
 
