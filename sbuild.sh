@@ -1,13 +1,13 @@
 #!/bin/bash
 
-BASE_SEMA_VER="Semaphore_N4_0.5.0"
+BASE_SEMA_VER="Semaphore_N4_0.5.1"
 VER=""
 SEMA_VER=$BASE_SEMA_VER$VER
 
 #export KBUILD_BUILD_VERSION="2"
 export LOCALVERSION="-"`echo $SEMA_VER`
-#export CROSS_COMPILE=/opt/toolchains/gcc-linaro-arm-linux-gnueabihf-4.8-2013.04-20130417_linux/bin/arm-linux-gnueabihf-
-export CROSS_COMPILE=../arm-linux-androideabi-4.7/bin/arm-linux-androideabi-
+export CROSS_COMPILE=/opt/toolchains/gcc-linaro-arm-linux-gnueabihf-4.7-2013.04-20130415_linux/bin/arm-linux-gnueabihf-
+#export CROSS_COMPILE=../arm-linux-androideabi-4.7/bin/arm-linux-androideabi-
 export ARCH=arm
 export SUBARCH=arm
 export KBUILD_BUILD_USER=stratosk
