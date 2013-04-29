@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BASE_SEMA_VER="Semaphore_N4_0.5.1"
+BASE_SEMA_VER="Semaphore_N4_0.5.5"
 VER=""
 SEMA_VER=$BASE_SEMA_VER$VER
 
@@ -21,8 +21,8 @@ DATE_START=$(date +"%s")
 make "semaphore_mako_defconfig"
 
 #eval $(grep CONFIG_INITRAMFS_SOURCE .config)
-#INIT_DIR=$CONFIG_INITRAMFS_SOURCE
-#MODULES_DIR=`echo $INIT_DIR`files/modules
+INIT_DIR=../mako_initramfs
+MODULES_DIR=../mako_initramfs/lib/modules
 KERNEL_DIR=`pwd`
 OUTPUT_DIR=output/
 CWM_DIR=cwm/
@@ -36,10 +36,13 @@ echo "KERNEL_DIR="$KERNEL_DIR
 echo "OUTPUT_DIR="$OUTPUT_DIR
 echo "CWM_DIR="$CWM_DIR
 
-#make -j16 modules
+make -j16 modules
 
-#rm `echo $MODULES_DIR"/*"`
-#find $KERNEL_DIR -name '*.ko' -exec cp -v {} $MODULES_DIR \;
+rm `echo $MODULES_DIR"/*"`
+find $KERNEL_DIR -name '*.ko' -exec cp -v {} $MODULES_DIR \;
+cd $INIT_DIR
+find . | cpio -o -H newc | gzip -9 > ../initrd.img
+cd  $KERNEL_DIR
 
 make -j16 zImage
 
