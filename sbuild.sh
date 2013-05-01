@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BASE_SEMA_VER="Semaphore_N4_0.5.5"
+BASE_SEMA_VER="Semaphore_N4_0.6.0"
 VER=""
 SEMA_VER=$BASE_SEMA_VER$VER
 
@@ -36,7 +36,8 @@ echo "KERNEL_DIR="$KERNEL_DIR
 echo "OUTPUT_DIR="$OUTPUT_DIR
 echo "CWM_DIR="$CWM_DIR
 
-make -j16 modules
+#make -j16 modules
+make -j16
 
 rm `echo $MODULES_DIR"/*"`
 find $KERNEL_DIR -name '*.ko' -exec cp -v {} $MODULES_DIR \;
@@ -44,7 +45,7 @@ cd $INIT_DIR
 find . | cpio -o -H newc | gzip -9 > ../initrd.img
 cd  $KERNEL_DIR
 
-make -j16 zImage
+#make -j16 zImage
 
 #cd arch/arm/boot
 #tar cvf `echo $SEMA_VER`.tar zImage
