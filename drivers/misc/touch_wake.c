@@ -37,10 +37,6 @@ static bool timed_out;
 static unsigned int touchoff_delay;
 static unsigned int powerkey_flag;
 
-/*
-extern void touchscreen_enable(void);
-extern void touchscreen_disable(void);
-*/
 static void touchwake_touchoff(struct work_struct *touchoff_work);
 static DECLARE_DELAYED_WORK(touchoff_work, touchwake_touchoff);
 static void press_powerkey(struct work_struct *ws);
