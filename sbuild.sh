@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BASE_SEMA_VER="Semaphore_N4_0.7.0"
+BASE_SEMA_VER="Semaphore_N4_0.7.1"
 VER=""
 SEMA_VER=$BASE_SEMA_VER$VER
 
