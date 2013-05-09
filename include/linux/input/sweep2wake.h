@@ -31,6 +31,7 @@
 
 extern unsigned int retry_cnt;
 extern bool s2w_switch;
+extern bool s2w_error;
 extern bool scr_suspended;
 extern bool exec_count;
 extern bool barrier[2];

@@ -880,8 +880,12 @@ static void touch_work_func(struct work_struct *work)
 	ret = touch_device_func->data(ts->client, ts->ts_data.curr_data,
 		&ts->ts_data.curr_button, &ts->ts_data.total_num);
 	if (ret < 0) {
-		if (ret == -EINVAL) /* Ignore the error */
-			return;
+		if (ret == -EINVAL) { /* Ignore the error */
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+			if (!scr_suspended)
+#endif
+				return;
+		}
 		goto err_out_critical;
 	}
 
@@ -925,6 +929,12 @@ out:
 	return;
 
 err_out_retry:
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+        if (scr_suspended) {
+		s2w_error = true;
+		return;
+	}
+#endif
 	ts->work_sync_err_cnt++;
 	atomic_inc(&ts->next_work);
 	queue_work(touch_wq, &ts->work);
@@ -932,6 +942,12 @@ err_out_retry:
 	return;
 
 err_out_critical:
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+        if (scr_suspended) {
+		s2w_error = true;
+		return;
+	}
+#endif
 	ts->work_sync_err_cnt = 0;
 	safety_reset(ts);
 	touch_ic_init(ts);
@@ -2372,8 +2388,14 @@ static void touch_late_resume(struct early_suspend *h)
 		        queue_delayed_work(touch_wq, &ts->work_init, 0);
 
 #ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
-	} else
+	} else {
                 disable_irq_wake(ts->client->irq);
+		if (s2w_error) {
+			s2w_error = false;
+			TOUCH_ERR_MSG("soft resetting device\n");
+			store_ts_reset(ts, "soft", 0);
+		}
+	}
 #endif
 }
 #endif
