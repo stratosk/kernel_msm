@@ -54,7 +54,6 @@ static void check_temp(struct work_struct *work)
 {
 	const short high_temp = 62; /* in Celcius */
 	const short low_temp = 52;
-	const short max_br = 255;
 	struct tsens_device tsens_dev;
 	unsigned long temp = 0;
 	int ret = 0;
@@ -71,7 +70,7 @@ static void check_temp(struct work_struct *work)
 
 	/* A..B -> C..D		x' = (D-C)*(X-A)/(B-A) */
 	if (temp > low_temp)
-		br = (max_br * (temp - low_temp)) / (high_temp - low_temp);
+		br = (LED_FULL * (temp - low_temp)) / (high_temp - low_temp);
 
 	diff = abs(br - brightness);
 	if (diff > 120)
@@ -85,10 +84,10 @@ static void check_temp(struct work_struct *work)
 	else
 		br > brightness ? ++brightness : --brightness;
 
-	if (brightness < 0)
-		brightness = 0;
-	else if (brightness > 255)
-		brightness = 255;
+	if (brightness < LED_OFF)
+		brightness = LED_OFF;
+	else if (brightness > LED_FULL)
+		brightness = LED_FULL;
 
 	pr_debug("%s: temp: %lu, br: %u, led_br: %u\n", __func__,
 					temp, br, brightness);
