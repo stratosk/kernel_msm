@@ -22,6 +22,10 @@
 #include <linux/leds.h>
 #include "leds.h"
 
+#define HIGH_TEMP	(62)	/* in Celcius */
+#define LOW_TEMP	(52)
+#define SENSOR_ID	(7)
+
 static void check_temp(struct work_struct *work);
 static DECLARE_DELAYED_WORK(check_temp_work, check_temp);
 static unsigned delay;
@@ -52,15 +56,13 @@ static struct led_trigger thermal_led_trigger = {
 
 static void check_temp(struct work_struct *work)
 {
-	const short high_temp = 62; /* in Celcius */
-	const short low_temp = 52;
 	struct tsens_device tsens_dev;
 	unsigned long temp = 0;
 	int ret = 0;
 	int br = 0;
 	int diff = 0;
 
-	tsens_dev.sensor_num = 7;
+	tsens_dev.sensor_num = SENSOR_ID;
 	ret = tsens_get_temp(&tsens_dev, &temp);
 	if (ret) {
 		pr_debug("%s: Unable to read TSENS sensor %d\n", __func__,
@@ -69,8 +71,8 @@ static void check_temp(struct work_struct *work)
 	}
 
 	/* A..B -> C..D		x' = (D-C)*(X-A)/(B-A) */
-	if (temp > low_temp)
-		br = (LED_FULL * (temp - low_temp)) / (high_temp - low_temp);
+	if (temp > LOW_TEMP)
+		br = (LED_FULL * (temp - LOW_TEMP)) / (HIGH_TEMP - LOW_TEMP);
 
 	diff = abs(br - brightness);
 	if (diff > 120)
