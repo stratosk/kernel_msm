@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BASE_SEMA_VER="Semaphore_N4_0.8.0"
+BASE_SEMA_VER="Semaphore_N4_0.9.0"
 VER=""
 SEMA_VER=$BASE_SEMA_VER$VER
 
@@ -38,7 +38,7 @@ echo "OUTPUT_DIR="$OUTPUT_DIR
 echo "CWM_DIR="$CWM_DIR
 
 #make -j16 modules
-make -j16
+make -j16 > /dev/null
 
 rm `echo $MODULES_DIR"/*"`
 find $KERNEL_DIR -name '*.ko' -exec cp -v {} $MODULES_DIR \;
