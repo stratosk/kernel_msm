@@ -1053,7 +1053,7 @@ static int acpu_table_show(struct seq_file *m, void *unused)
 	seq_printf(m, "Higher KHZ threshold: %lu\n", higher_khz_thres);
 	seq_printf(m, "Lower under uV: %u\n", lower_uV);
 	seq_printf(m, "Higher under uV: %u\n\n", higher_uV);
-	seq_printf(m, "CPU KHz  VDD(stock)  VDD(final)\n");
+	seq_printf(m, "CPU KHz  VDD(stock)  VDD(final)  Difference\n");
 
 	for (level = drv.acpu_freq_tbl; level->speed.khz != 0; level++) {
 		if (!level->use_for_scaling)
@@ -1068,8 +1068,12 @@ static int acpu_table_show(struct seq_file *m, void *unused)
 		under_uV = (level->speed.khz >= higher_khz_thres) ? higher_uV :
 								    lower_uV;
 		/* Core voltage final information */
-		seq_printf(m, "%10d\n", level->vdd_core +
+		seq_printf(m, "%10d  ", level->vdd_core +
 				(enable_boost ? drv.boost_uv : 0) - under_uV);
+		
+		/* Core voltage difference */
+		seq_printf(m, "%10d  \n", (enable_boost ? 0 : -drv.boost_uv) -
+								under_uV);
 	}
 
 	return 0;
