@@ -1050,7 +1050,7 @@ static int acpu_table_show(struct seq_file *m, void *unused)
 	seq_printf(m, "CPU PVS: %s\n", pvs_names[pvs_bin]);
 	seq_printf(m, "Boost uV: %u\n", drv.boost_uv);
 	seq_printf(m, "Boost uV enabled: %s\n", (enable_boost ? "Yes" : "No"));
-	seq_printf(m, "Higher KHZ threshold: %lu\n", higher_khz_thres);
+	seq_printf(m, "Higher KHz threshold: %lu\n", higher_khz_thres);
 	seq_printf(m, "Lower under uV: %u\n", lower_uV);
 	seq_printf(m, "Higher under uV: %u\n\n", higher_uV);
 	seq_printf(m, "CPU KHz  VDD(stock)  VDD(final)  Difference\n");
