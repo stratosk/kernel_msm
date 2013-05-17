@@ -10,7 +10,7 @@
  * published by the Free Software Foundation.
  *
  */
-
+#define DEBUG
 #define pr_fmt(fmt) "ledtrig_thermal: " fmt
 
 #include <linux/kernel.h>
@@ -25,6 +25,8 @@
 #define HIGH_TEMP	(62)	/* in Celcius */
 #define LOW_TEMP	(52)
 #define SENSOR_ID	(7)
+#define DELAY_OFF	(5 * HZ)
+#define DELAY_ON	(2 * HZ)
 
 static void check_temp(struct work_struct *work);
 static DECLARE_DELAYED_WORK(check_temp_work, check_temp);
@@ -34,6 +36,7 @@ static int active;
 
 static void thermal_trig_activate(struct led_classdev *led_cdev)
 {
+	delay = DELAY_OFF;
 	schedule_delayed_work(&check_temp_work, delay);
 	active = 1;
 	pr_info("%s: activated\n", __func__);
@@ -97,6 +100,7 @@ static void check_temp(struct work_struct *work)
 	led_trigger_event(&thermal_led_trigger, brightness);
 
 reschedule:
+	delay = (brightness == LED_OFF) ? DELAY_OFF : DELAY_ON;
 	schedule_delayed_work(&check_temp_work, delay);
 }
 
@@ -121,6 +125,7 @@ static void thermal_trig_late_resume(struct early_suspend *h)
 	if (!active)
 		return;
 
+	delay = (brightness == LED_OFF) ? DELAY_OFF : DELAY_ON;
 	schedule_delayed_work(&check_temp_work, delay);
 
 	pr_debug("%s: led_br: %u\n", __func__, brightness);
@@ -137,7 +142,7 @@ static struct early_suspend thermal_trig_suspend_data = {
 static int __init thermal_trig_init(void)
 {
 	int ret;
-	delay = 2 * HZ;
+	delay = DELAY_OFF;
 	brightness = 0;
 	active = 0;
 
