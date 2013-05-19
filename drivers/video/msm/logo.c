@@ -20,6 +20,7 @@
 #include <linux/vt_kern.h>
 #include <linux/unistd.h>
 #include <linux/syscalls.h>
+#include <asm/uaccess.h>
 
 #include <linux/irq.h>
 #include <asm/system.h>
@@ -51,6 +52,7 @@ int load_565rle_image(char *filename, bool bf_supported)
 		return -ENODEV;
 	}
 
+	set_fs(KERNEL_DS);
 	fd = sys_open(filename, O_RDONLY, 0);
 	if (fd < 0) {
 		printk(KERN_WARNING "%s: Can not open %s\n",
@@ -75,6 +77,7 @@ int load_565rle_image(char *filename, bool bf_supported)
 	}
 
 	max = fb_width(info) * fb_height(info);
+	pr_info("%s: width: %u, height: %u", __func__, fb_width(info), fb_height(info));
 	ptr = data;
 	if (bf_supported && (info->node == 1 || info->node == 2)) {
 		err = -EPERM;
