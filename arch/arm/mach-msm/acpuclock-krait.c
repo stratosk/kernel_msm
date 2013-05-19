@@ -1070,9 +1070,9 @@ static int acpu_table_show(struct seq_file *m, void *unused)
 		/* Core voltage final information */
 		seq_printf(m, "%10d  ", level->vdd_core +
 				(enable_boost ? drv.boost_uv : 0) - under_uV);
-		
+
 		/* Core voltage difference */
-		seq_printf(m, "%10d  \n", (enable_boost ? 0 : -drv.boost_uv) -
+		seq_printf(m, "%10d\n", (enable_boost ? 0 : -drv.boost_uv) -
 								under_uV);
 	}
 
