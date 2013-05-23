@@ -11,6 +11,9 @@
 #include <linux/types.h>
 #include <linux/module.h>
 #include <linux/crc-t10dif.h>
+#include <linux/err.h>
+#include <linux/init.h>
+#include <crypto/hash.h>
 
 /* Table generated using the following polynomium:
  * x^16 + x^15 + x^11 + x^9 + x^8 + x^7 + x^5 + x^4 + x^2 + x + 1
@@ -51,9 +54,11 @@ static const __u16 t10_dif_crc_table[256] = {
 	0xF0D8, 0x7B6F, 0x6C01, 0xE7B6, 0x42DD, 0xC96A, 0xDE04, 0x55B3
 };
 
-__u16 crc_t10dif(const unsigned char *buffer, size_t len)
+static struct crypto_shash *crct10dif_tfm;
+static bool init;
+
+__u16 crc_t10dif_generic(__u16 crc, const unsigned char *buffer, size_t len)
 {
-	__u16 crc = 0;
 	unsigned int i;
 
 	for (i = 0 ; i < len ; i++)
@@ -61,7 +66,93 @@ __u16 crc_t10dif(const unsigned char *buffer, size_t len)
 
 	return crc;
 }
+EXPORT_SYMBOL(crc_t10dif_generic);
+
+/*
+ * If we have defined faster crypto transform for CRC-T10DIF, use that instead.
+ * This allows us to plug in fast version of CRC-T10DIF when available.
+ */
+
+void crc_t10dif_update_lib()
+{
+	struct crypto_shash *new_tfm;
+
+	new_tfm = crypto_alloc_shash("crct10dif", 0, 0);
+	if (IS_ERR(new_tfm))
+		return;
+
+	if (init && crct10dif_tfm) {
+		/* We are using crct10dif_tfm, cannot switch it to new_tfm */
+		if (crypto_tfm_alg_priority(&new_tfm->base) >
+		    crypto_tfm_alg_priority(&crct10dif_tfm->base)) {
+			pr_info("%s should be loaded prior to initializing "
+				"crc-t10dif module.\n",
+				crypto_tfm_alg_driver_name(&new_tfm->base));
+		}
+		goto free_tfm;
+	}
+
+	if (crypto_tfm_alg_priority(&new_tfm->base) <= 100)
+		/* don't need to use crypto xform for generic algorithm */
+		goto free_tfm;
+
+	if (!crct10dif_tfm)
+		goto set_tfm;
+
+	if (crypto_tfm_alg_priority(&new_tfm->base) <=
+	    crypto_tfm_alg_priority(&crct10dif_tfm->base))
+		goto free_tfm;
+
+	/* we haven't initialized this module and use crct10dif_tfm yet,
+	 * safe to free crct10dif_tfm and use a better algorithm
+	 */
+	crypto_free_shash(crct10dif_tfm);
+set_tfm:
+	crct10dif_tfm = new_tfm;
+	return;
+
+free_tfm:
+	crypto_free_shash(new_tfm);
+}
+EXPORT_SYMBOL(crc_t10dif_update_lib);
+
+__u16 crc_t10dif(const unsigned char *buffer, size_t len)
+{
+	struct {
+		struct shash_desc shash;
+		char ctx[2];
+	} desc;
+	int err;
+
+	if (unlikely(!init) || !crct10dif_tfm)
+		return crc_t10dif_generic(0, buffer, len);
+
+	desc.shash.tfm = crct10dif_tfm;
+	desc.shash.flags = 0;
+	*(__u16 *)desc.ctx = 0;
+
+	err = crypto_shash_update(&desc.shash, buffer, len);
+	BUG_ON(err);
+
+	return *(__u16 *)desc.ctx;
+}
 EXPORT_SYMBOL(crc_t10dif);
+
+static int __init crc_t10dif_mod_init(void)
+{
+	crc_t10dif_update_lib();
+	init = true;
+	return 0;
+}
+
+static void __exit crc_t10dif_mod_fini(void)
+{
+	if (crct10dif_tfm)
+		crypto_free_shash(crct10dif_tfm);
+}
+
+module_init(crc_t10dif_mod_init);
+module_exit(crc_t10dif_mod_fini);
 
 MODULE_DESCRIPTION("T10 DIF CRC calculation");
 MODULE_LICENSE("GPL");
