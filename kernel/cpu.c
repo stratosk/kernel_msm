@@ -133,6 +133,27 @@ static void cpu_hotplug_done(void)
 	mutex_unlock(&cpu_hotplug.lock);
 }
 
+/*
+ * Wait for currently running CPU hotplug operations to complete (if any) and
+ * disable future CPU hotplug (from sysfs). The 'cpu_add_remove_lock' protects
+ * the 'cpu_hotplug_disabled' flag. The same lock is also acquired by the
+ * hotplug path before performing hotplug operations. So acquiring that lock
+ * guarantees mutual exclusion from any currently running hotplug operations.
+ */
+void cpu_hotplug_disable(void)
+{
+	cpu_maps_update_begin();
+	cpu_hotplug_disabled = 1;
+	cpu_maps_update_done();
+}
+
+void cpu_hotplug_enable(void)
+{
+	cpu_maps_update_begin();
+	cpu_hotplug_disabled = 0;
+	cpu_maps_update_done();
+}
+
 #else /* #if CONFIG_HOTPLUG_CPU */
 static void cpu_hotplug_begin(void) {}
 static void cpu_hotplug_done(void) {}
@@ -539,27 +560,6 @@ static int __init alloc_frozen_cpus(void)
 	return 0;
 }
 core_initcall(alloc_frozen_cpus);
-
-/*
- * Wait for currently running CPU hotplug operations to complete (if any) and
- * disable future CPU hotplug (from sysfs). The 'cpu_add_remove_lock' protects
- * the 'cpu_hotplug_disabled' flag. The same lock is also acquired by the
- * hotplug path before performing hotplug operations. So acquiring that lock
- * guarantees mutual exclusion from any currently running hotplug operations.
- */
-void cpu_hotplug_disable(void)
-{
-	cpu_maps_update_begin();
-	cpu_hotplug_disabled = 1;
-	cpu_maps_update_done();
-}
-
-void cpu_hotplug_enable(void)
-{
-	cpu_maps_update_begin();
-	cpu_hotplug_disabled = 0;
-	cpu_maps_update_done();
-}
 
 /*
  * When callbacks for CPU hotplug notifications are being executed, we must
