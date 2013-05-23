@@ -55,8 +55,10 @@ struct device;
 
 #ifdef CONFIG_PM
 extern const char power_group_name[];		/* = "power" */
+#define pm_ops_ptr(_ptr)	(_ptr)
 #else
 #define power_group_name	NULL
+#define pm_ops_ptr(_ptr)	NULL
 #endif
 
 typedef struct pm_message {

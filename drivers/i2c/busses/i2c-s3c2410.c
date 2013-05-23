@@ -1213,18 +1213,12 @@ static int s3c24xx_i2c_resume(struct device *dev)
 }
 #endif
 
-#ifdef CONFIG_PM
 static const struct dev_pm_ops s3c24xx_i2c_dev_pm_ops = {
 #ifdef CONFIG_PM_SLEEP
 	.suspend_noirq = s3c24xx_i2c_suspend_noirq,
 	.resume = s3c24xx_i2c_resume,
 #endif
 };
-
-#define S3C24XX_DEV_PM_OPS (&s3c24xx_i2c_dev_pm_ops)
-#else
-#define S3C24XX_DEV_PM_OPS NULL
-#endif
 
 /* device driver for platform bus bits */
 
@@ -1235,7 +1229,7 @@ static struct platform_driver s3c24xx_i2c_driver = {
 	.driver		= {
 		.owner	= THIS_MODULE,
 		.name	= "s3c-i2c",
-		.pm	= S3C24XX_DEV_PM_OPS,
+		.pm	= pm_ops_ptr(&s3c24xx_i2c_dev_pm_ops),
 		.of_match_table = of_match_ptr(s3c24xx_i2c_match),
 	},
 };
