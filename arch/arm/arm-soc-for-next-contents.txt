@@ -1,0 +1,14 @@
+for-next contents for 3.11: 
+Format is a little different from before in an attempt to make it easier to read:
+
+<next/* branch>
+	<topic branch>
+		<contents>
+		<...>
+	<...>
+
+next/mailbox:
+	mailbox/subsystem
+		git://github.com/sumananna/mailbox.git dbx500-prcmu-mailbox
+
+
