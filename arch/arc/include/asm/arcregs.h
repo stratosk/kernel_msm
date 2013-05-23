@@ -21,8 +21,10 @@
 #define ARC_REG_FP_BCR		0x6B	/* Single-Precision FPU */
 #define ARC_REG_DPFP_BCR	0x6C	/* Dbl Precision FPU */
 #define ARC_REG_MMU_BCR		0x6f
+#define ARC_REG_DC_BCR		0x72	/* Dcache */
 #define ARC_REG_DCCM_BCR	0x74	/* DCCM Present + SZ */
 #define ARC_REG_TIMERS_BCR	0x75
+#define ARC_REG_IC_BCR		0x77	/* Icache */
 #define ARC_REG_ICCM_BCR	0x78
 #define ARC_REG_XY_MEM_BCR	0x79
 #define ARC_REG_MAC_BCR		0x7a
@@ -95,78 +97,6 @@
 #define AUX_ITRIGGER		0x40d
 #define AUX_IPULSE		0x415
 
-/* Timer related Aux registers */
-#define ARC_REG_TIMER0_LIMIT	0x23	/* timer 0 limit */
-#define ARC_REG_TIMER0_CTRL	0x22	/* timer 0 control */
-#define ARC_REG_TIMER0_CNT	0x21	/* timer 0 count */
-#define ARC_REG_TIMER1_LIMIT	0x102	/* timer 1 limit */
-#define ARC_REG_TIMER1_CTRL	0x101	/* timer 1 control */
-#define ARC_REG_TIMER1_CNT	0x100	/* timer 1 count */
-
-#define TIMER_CTRL_IE		(1 << 0) /* Interupt when Count reachs limit */
-#define TIMER_CTRL_NH		(1 << 1) /* Count only when CPU NOT halted */
-
-/* MMU Management regs */
-#define ARC_REG_TLBPD0		0x405
-#define ARC_REG_TLBPD1		0x406
-#define ARC_REG_TLBINDEX	0x407
-#define ARC_REG_TLBCOMMAND	0x408
-#define ARC_REG_PID		0x409
-#define ARC_REG_SCRATCH_DATA0	0x418
-
-/* Bits in MMU PID register */
-#define MMU_ENABLE		(1 << 31)	/* Enable MMU for process */
-
-/* Error code if probe fails */
-#define TLB_LKUP_ERR		0x80000000
-
-/* TLB Commands */
-#define TLBWrite    0x1
-#define TLBRead     0x2
-#define TLBGetIndex 0x3
-#define TLBProbe    0x4
-
-#if (CONFIG_ARC_MMU_VER >= 2)
-#define TLBWriteNI  0x5		/* write JTLB without inv uTLBs */
-#define TLBIVUTLB   0x6		/* explicitly inv uTLBs */
-#else
-#undef TLBWriteNI		/* These cmds don't exist on older MMU */
-#undef TLBIVUTLB
-#endif
-
-/* Instruction cache related Auxiliary registers */
-#define ARC_REG_IC_BCR		0x77	/* Build Config reg */
-#define ARC_REG_IC_IVIC		0x10
-#define ARC_REG_IC_CTRL		0x11
-#define ARC_REG_IC_IVIL		0x19
-#if (CONFIG_ARC_MMU_VER > 2)
-#define ARC_REG_IC_PTAG		0x1E
-#endif
-
-/* Bit val in IC_CTRL */
-#define IC_CTRL_CACHE_DISABLE   0x1
-
-/* Data cache related Auxiliary registers */
-#define ARC_REG_DC_BCR		0x72
-#define ARC_REG_DC_IVDC		0x47
-#define ARC_REG_DC_CTRL		0x48
-#define ARC_REG_DC_IVDL		0x4A
-#define ARC_REG_DC_FLSH		0x4B
-#define ARC_REG_DC_FLDL		0x4C
-#if (CONFIG_ARC_MMU_VER > 2)
-#define ARC_REG_DC_PTAG		0x5C
-#endif
-
-/* Bit val in DC_CTRL */
-#define DC_CTRL_INV_MODE_FLUSH  0x40
-#define DC_CTRL_FLUSH_STATUS    0x100
-
-/* MMU Management regs */
-#define ARC_REG_PID		0x409
-#define ARC_REG_SCRATCH_DATA0	0x418
-
-/* Bits in MMU PID register */
-#define MMU_ENABLE		(1 << 31)	/* Enable MMU for process */
 
 /*
  * Floating Pt Registers
@@ -293,24 +223,6 @@ struct bcr_identity {
 #endif
 };
 
-struct bcr_mmu_1_2 {
-#ifdef CONFIG_CPU_BIG_ENDIAN
-	unsigned int ver:8, ways:4, sets:4, u_itlb:8, u_dtlb:8;
-#else
-	unsigned int u_dtlb:8, u_itlb:8, sets:4, ways:4, ver:8;
-#endif
-};
-
-struct bcr_mmu_3 {
-#ifdef CONFIG_CPU_BIG_ENDIAN
-	unsigned int ver:8, ways:4, sets:4, osm:1, reserv:3, pg_sz:4,
-		     u_itlb:4, u_dtlb:4;
-#else
-	unsigned int u_dtlb:4, u_itlb:4, pg_sz:4, reserv:3, osm:1, sets:4,
-		     ways:4, ver:8;
-#endif
-};
-
 #define EXTN_SWAP_VALID     0x1
 #define EXTN_NORM_VALID     0x2
 #define EXTN_MINMAX_VALID   0x2
@@ -340,14 +252,6 @@ struct bcr_extn_xymem {
 	unsigned int ram_org:2, num_banks:4, bank_sz:4, ver:8;
 #else
 	unsigned int ver:8, bank_sz:4, num_banks:4, ram_org:2;
-#endif
-};
-
-struct bcr_cache {
-#ifdef CONFIG_CPU_BIG_ENDIAN
-	unsigned int pad:12, line_len:4, sz:4, config:4, ver:8;
-#else
-	unsigned int ver:8, config:4, sz:4, line_len:4, pad:12;
 #endif
 };
 
