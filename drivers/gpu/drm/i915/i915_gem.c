@@ -2042,6 +2042,11 @@ i915_add_request(struct intel_ring_buffer *ring,
 	request->seqno = intel_ring_get_seqno(ring);
 	request->ring = ring;
 	request->tail = request_ring_position;
+	request->ctx = ring->last_context;
+
+	if (request->ctx)
+		i915_gem_context_reference(request->ctx);
+
 	request->emitted_jiffies = jiffies;
 	was_empty = list_empty(&ring->request_list);
 	list_add_tail(&request->list, &ring->request_list);
@@ -2094,6 +2099,17 @@ i915_gem_request_remove_from_client(struct drm_i915_gem_request *request)
 	spin_unlock(&file_priv->mm.lock);
 }
 
+static void i915_gem_free_request(struct drm_i915_gem_request *request)
+{
+	list_del(&request->list);
+	i915_gem_request_remove_from_client(request);
+
+	if (request->ctx)
+		i915_gem_context_unreference(request->ctx);
+
+	kfree(request);
+}
+
 static void i915_gem_reset_ring_lists(struct drm_i915_private *dev_priv,
 				      struct intel_ring_buffer *ring)
 {
@@ -2104,9 +2120,7 @@ static void i915_gem_reset_ring_lists(struct drm_i915_private *dev_priv,
 					   struct drm_i915_gem_request,
 					   list);
 
-		list_del(&request->list);
-		i915_gem_request_remove_from_client(request);
-		kfree(request);
+		i915_gem_free_request(request);
 	}
 
 	while (!list_empty(&ring->active_list)) {
@@ -2198,9 +2212,7 @@ i915_gem_retire_requests_ring(struct intel_ring_buffer *ring)
 		 */
 		ring->last_retired_head = request->tail;
 
-		list_del(&request->list);
-		i915_gem_request_remove_from_client(request);
-		kfree(request);
+		i915_gem_free_request(request);
 	}
 
 	/* Move any buffers on the active list that are no longer referenced
@@ -2681,18 +2693,33 @@ static inline int fence_number(struct drm_i915_private *dev_priv,
 	return fence - dev_priv->fence_regs;
 }
 
+struct write_fence {
+	struct drm_device *dev;
+	struct drm_i915_gem_object *obj;
+	int fence;
+};
+
 static void i915_gem_write_fence__ipi(void *data)
 {
+	struct write_fence *args = data;
+
+	/* Required for SNB+ with LLC */
 	wbinvd();
+
+	/* Required for VLV */
+	i915_gem_write_fence(args->dev, args->fence, args->obj);
 }
 
 static void i915_gem_object_update_fence(struct drm_i915_gem_object *obj,
 					 struct drm_i915_fence_reg *fence,
 					 bool enable)
 {
-	struct drm_device *dev = obj->base.dev;
-	struct drm_i915_private *dev_priv = dev->dev_private;
-	int fence_reg = fence_number(dev_priv, fence);
+	struct drm_i915_private *dev_priv = obj->base.dev->dev_private;
+	struct write_fence args = {
+		.dev = obj->base.dev,
+		.fence = fence_number(dev_priv, fence),
+		.obj = enable ? obj : NULL,
+	};
 
 	/* In order to fully serialize access to the fenced region and
 	 * the update to the fence register we need to take extreme
@@ -2703,13 +2730,19 @@ static void i915_gem_object_update_fence(struct drm_i915_gem_object *obj,
 	 * SNB+ we need to take a step further and emit an explicit wbinvd()
 	 * on each processor in order to manually flush all memory
 	 * transactions before updating the fence register.
+	 *
+	 * However, Valleyview complicates matter. There the wbinvd is
+	 * insufficient and unlike SNB/IVB requires the serialising
+	 * register write. (Note that that register write by itself is
+	 * conversely not sufficient for SNB+.) To compromise, we do both.
 	 */
-	if (HAS_LLC(obj->base.dev))
-		on_each_cpu(i915_gem_write_fence__ipi, NULL, 1);
-	i915_gem_write_fence(dev, fence_reg, enable ? obj : NULL);
+	if (INTEL_INFO(args.dev)->gen >= 6)
+		on_each_cpu(i915_gem_write_fence__ipi, &args, 1);
+	else
+		i915_gem_write_fence(args.dev, args.fence, args.obj);
 
 	if (enable) {
-		obj->fence_reg = fence_reg;
+		obj->fence_reg = args.fence;
 		fence->obj = obj;
 		list_move_tail(&fence->lru_list, &dev_priv->mm.fence_list);
 	} else {
@@ -2963,7 +2996,10 @@ i915_gem_object_bind_to_gtt(struct drm_i915_gem_object *obj,
 	 */
 	if (obj->base.size >
 	    (map_and_fenceable ? dev_priv->gtt.mappable_end : dev_priv->gtt.total)) {
-		DRM_ERROR("Attempting to bind an object larger than the aperture\n");
+		DRM_ERROR("Attempting to bind an object larger than the aperture: object=%zd > %s aperture=%ld\n",
+			  obj->base.size,
+			  map_and_fenceable ? "mappable" : "total",
+			  map_and_fenceable ? dev_priv->gtt.mappable_end : dev_priv->gtt.total);
 		return -E2BIG;
 	}
 
