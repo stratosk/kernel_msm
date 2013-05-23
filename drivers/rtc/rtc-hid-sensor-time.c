@@ -40,6 +40,7 @@ enum hid_time_channel {
 	CHANNEL_SCAN_INDEX_HOUR,
 	CHANNEL_SCAN_INDEX_MINUTE,
 	CHANNEL_SCAN_INDEX_SECOND,
+	CHANNEL_SCAN_INDEX_MILLISECOND, /* optional */
 	TIME_RTC_CHANNEL_MAX,
 };
 
@@ -53,9 +54,11 @@ struct hid_time_state {
 	struct hid_sensor_common common_attributes;
 	struct hid_sensor_hub_attribute_info info[TIME_RTC_CHANNEL_MAX];
 	struct rtc_time last_time;
+	unsigned last_ms; /* == UINT_MAX to indicate ms aren't supported */
 	spinlock_t lock_last_time;
 	struct completion comp_last_time;
 	struct rtc_time time_buf;
+	unsigned ms_buf;
 	struct rtc_device *rtc;
 	struct hid_time_workts *workts;
 };
@@ -67,16 +70,18 @@ static const u32 hid_time_addresses[TIME_RTC_CHANNEL_MAX] = {
 	HID_USAGE_SENSOR_TIME_HOUR,
 	HID_USAGE_SENSOR_TIME_MINUTE,
 	HID_USAGE_SENSOR_TIME_SECOND,
+	HID_USAGE_SENSOR_TIME_MILLISECOND, /* optional */
 };
 
 /* Channel names for verbose error messages */
 static const char * const hid_time_channel_names[TIME_RTC_CHANNEL_MAX] = {
-	"year", "month", "day", "hour", "minute", "second",
+	"year", "month", "day", "hour", "minute", "second", "millisecond",
 };
 
 static void hid_time_hctosys(struct hid_time_state *time_state)
 {
 	struct timespec ts;
+	char msbuf[5];
 	int rc = rtc_valid_tm(&time_state->last_time);
 
 	if (rc) {
@@ -102,18 +107,25 @@ static void hid_time_hctosys(struct hid_time_state *time_state)
 		 */
 		return;
 
-	ts.tv_nsec = NSEC_PER_SEC >> 1;
+	if (time_state->last_ms != UINT_MAX) {
+		ts.tv_nsec = time_state->last_ms * NSEC_PER_MSEC;
+		snprintf(msbuf, sizeof(msbuf), ":%03d", time_state->last_ms);
+	} else {
+		ts.tv_nsec = NSEC_PER_SEC >> 1;
+		*msbuf = 0;
+	}
 	rtc_tm_to_time(&time_state->last_time, &ts.tv_sec);
 	rc = do_settimeofday(&ts);
 	dev_info(time_state->rtc->dev.parent,
 		"hctosys: setting system clock to "
-		"%d-%02d-%02d %02d:%02d:%02d UTC (%u)\n",
+		"%d-%02d-%02d %02d:%02d:%02d%s UTC (%u)\n",
 		time_state->last_time.tm_year + 1900,
 		time_state->last_time.tm_mon + 1,
 		time_state->last_time.tm_mday,
 		time_state->last_time.tm_hour,
 		time_state->last_time.tm_min,
 		time_state->last_time.tm_sec,
+		msbuf,
 		(unsigned int) ts.tv_sec);
 }
 
@@ -126,6 +138,8 @@ static int hid_time_proc_event(struct hid_sensor_hub_device *hsdev,
 
 	spin_lock_irqsave(&time_state->lock_last_time, flags);
 	time_state->last_time = time_state->time_buf;
+	if (time_state->last_ms != UINT_MAX)
+		time_state->last_ms = time_state->ms_buf;
 	spin_unlock_irqrestore(&time_state->lock_last_time, flags);
 	complete(&time_state->comp_last_time);
 	if (unlikely(!hid_time_time_set_once && hid_time_hctosys_enabled)) {
@@ -188,6 +202,9 @@ static int hid_time_capture_sample(struct hid_sensor_hub_device *hsdev,
 	case HID_USAGE_SENSOR_TIME_SECOND:
 		time_buf->tm_sec = (int)hid_time_value(raw_len, raw_data);
 		break;
+	case HID_USAGE_SENSOR_TIME_MILLISECOND:
+		time_state->ms_buf = hid_time_value(raw_len, raw_data);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -214,12 +231,18 @@ static int hid_time_parse_report(struct platform_device *pdev,
 {
 	int report_id, i;
 
-	for (i = 0; i < TIME_RTC_CHANNEL_MAX; ++i)
+	/* Check if all required attributes are available */
+	for (i = 0; i < CHANNEL_SCAN_INDEX_MILLISECOND; ++i)
 		if (sensor_hub_input_get_attribute_info(hsdev,
 				HID_INPUT_REPORT, usage_id,
 				hid_time_addresses[i],
 				&time_state->info[i]) < 0)
 			return -EINVAL;
+	if (!sensor_hub_input_get_attribute_info(hsdev, HID_INPUT_REPORT,
+		usage_id, hid_time_addresses[i], &time_state->info[i])) {
+		dev_info(&pdev->dev, "milliseconds supported\n");
+		time_state->last_ms = 0;
+	}
 	/* Check the (needed) attributes for sanity */
 	report_id = time_state->info[0].report_id;
 	if (report_id < 0) {
@@ -227,6 +250,10 @@ static int hid_time_parse_report(struct platform_device *pdev,
 		return -EINVAL;
 	}
 	for (i = 0; i < TIME_RTC_CHANNEL_MAX; ++i) {
+		if (time_state->info[i].attrib_id ==
+				HID_USAGE_SENSOR_TIME_MILLISECOND &&
+				time_state->last_ms == UINT_MAX)
+			continue;
 		if (time_state->info[i].report_id != report_id) {
 			dev_err(&pdev->dev,
 				"not all needed attributes inside the same report!\n");
@@ -318,6 +345,8 @@ static int hid_time_probe(struct platform_device *pdev)
 
 	if (time_state == NULL)
 		return -ENOMEM;
+
+	time_state->last_ms = UINT_MAX;
 
 	platform_set_drvdata(pdev, time_state);
 
