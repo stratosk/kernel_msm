@@ -74,7 +74,7 @@ static int pps_gpio_setup(struct platform_device *pdev)
 	int ret;
 	const struct pps_gpio_platform_data *pdata = pdev->dev.platform_data;
 
-	ret = gpio_request(pdata->gpio_pin, pdata->gpio_label);
+	ret = devm_gpio_request(&pdev->dev, pdata->gpio_pin, pdata->gpio_label);
 	if (ret) {
 		pr_warning("failed to request GPIO %u\n", pdata->gpio_pin);
 		return -EINVAL;
@@ -83,7 +83,6 @@ static int pps_gpio_setup(struct platform_device *pdev)
 	ret = gpio_direction_input(pdata->gpio_pin);
 	if (ret) {
 		pr_warning("failed to set pin direction\n");
-		gpio_free(pdata->gpio_pin);
 		return -EINVAL;
 	}
 
@@ -109,7 +108,6 @@ static int pps_gpio_probe(struct platform_device *pdev)
 	struct pps_gpio_device_data *data;
 	int irq;
 	int ret;
-	int err;
 	int pps_default_params;
 	const struct pps_gpio_platform_data *pdata = pdev->dev.platform_data;
 
@@ -123,17 +121,14 @@ static int pps_gpio_probe(struct platform_device *pdev)
 	irq = gpio_to_irq(pdata->gpio_pin);
 	if (irq < 0) {
 		pr_err("failed to map GPIO to IRQ: %d\n", irq);
-		err = -EINVAL;
-		goto return_error;
+		return -EINVAL;
 	}
 
 	/* allocate space for device info */
 	data = devm_kzalloc(&pdev->dev, sizeof(struct pps_gpio_device_data),
 			    GFP_KERNEL);
-	if (data == NULL) {
-		err = -ENOMEM;
-		goto return_error;
-	}
+	if (data == NULL)
+		return -ENOMEM;
 
 	/* initialize PPS specific parts of the bookkeeping data structure. */
 	data->info.mode = PPS_CAPTUREASSERT | PPS_OFFSETASSERT |
@@ -152,41 +147,32 @@ static int pps_gpio_probe(struct platform_device *pdev)
 	data->pps = pps_register_source(&data->info, pps_default_params);
 	if (data->pps == NULL) {
 		pr_err("failed to register IRQ %d as PPS source\n", irq);
-		err = -EINVAL;
-		goto return_error;
+		return -EINVAL;
 	}
 
 	data->irq = irq;
 	data->pdata = pdata;
 
 	/* register IRQ interrupt handler */
-	ret = request_irq(irq, pps_gpio_irq_handler,
+	ret = devm_request_irq(&pdev->dev, irq, pps_gpio_irq_handler,
 			get_irqf_trigger_flags(pdata), data->info.name, data);
 	if (ret) {
 		pps_unregister_source(data->pps);
 		pr_err("failed to acquire IRQ %d\n", irq);
-		err = -EINVAL;
-		goto return_error;
+		return -EINVAL;
 	}
 
 	platform_set_drvdata(pdev, data);
 	dev_info(data->pps->dev, "Registered IRQ %d as PPS source\n", irq);
 
 	return 0;
-
-return_error:
-	gpio_free(pdata->gpio_pin);
-	return err;
 }
 
 static int pps_gpio_remove(struct platform_device *pdev)
 {
 	struct pps_gpio_device_data *data = platform_get_drvdata(pdev);
-	const struct pps_gpio_platform_data *pdata = data->pdata;
 
 	platform_set_drvdata(pdev, NULL);
-	free_irq(data->irq, data);
-	gpio_free(pdata->gpio_pin);
 	pps_unregister_source(data->pps);
 	pr_info("removed IRQ %d as PPS source\n", data->irq);
 	return 0;
@@ -201,23 +187,7 @@ static struct platform_driver pps_gpio_driver = {
 	},
 };
 
-static int __init pps_gpio_init(void)
-{
-	int ret = platform_driver_register(&pps_gpio_driver);
-	if (ret < 0)
-		pr_err("failed to register platform driver\n");
-	return ret;
-}
-
-static void __exit pps_gpio_exit(void)
-{
-	platform_driver_unregister(&pps_gpio_driver);
-	pr_debug("unregistered platform driver\n");
-}
-
-module_init(pps_gpio_init);
-module_exit(pps_gpio_exit);
-
+module_platform_driver(pps_gpio_driver);
 MODULE_AUTHOR("Ricardo Martins <rasm@fe.up.pt>");
 MODULE_AUTHOR("James Nuss <jamesnuss@nanometrics.ca>");
 MODULE_DESCRIPTION("Use GPIO pin as PPS source");

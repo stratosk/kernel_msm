@@ -27,6 +27,12 @@
 /* Usage ID from spec for Time: 0x2000A0 */
 #define DRIVER_NAME "HID-SENSOR-2000a0" /* must be lowercase */
 
+static bool hid_time_hctosys_enabled = 1;
+module_param_named(hctosys, hid_time_hctosys_enabled, bool, 0644);
+MODULE_PARM_DESC(hctosys,
+	"set the system time (once) if it is before 1970-01-02");
+static bool hid_time_time_set_once;
+
 enum hid_time_channel {
 	CHANNEL_SCAN_INDEX_YEAR,
 	CHANNEL_SCAN_INDEX_MONTH,
@@ -34,7 +40,13 @@ enum hid_time_channel {
 	CHANNEL_SCAN_INDEX_HOUR,
 	CHANNEL_SCAN_INDEX_MINUTE,
 	CHANNEL_SCAN_INDEX_SECOND,
+	CHANNEL_SCAN_INDEX_MILLISECOND, /* optional */
 	TIME_RTC_CHANNEL_MAX,
+};
+
+struct hid_time_workts {
+	struct work_struct work;
+	struct hid_time_state *time_state;
 };
 
 struct hid_time_state {
@@ -42,10 +54,13 @@ struct hid_time_state {
 	struct hid_sensor_common common_attributes;
 	struct hid_sensor_hub_attribute_info info[TIME_RTC_CHANNEL_MAX];
 	struct rtc_time last_time;
+	unsigned last_ms; /* == UINT_MAX to indicate ms aren't supported */
 	spinlock_t lock_last_time;
 	struct completion comp_last_time;
 	struct rtc_time time_buf;
+	unsigned ms_buf;
 	struct rtc_device *rtc;
+	struct hid_time_workts *workts;
 };
 
 static const u32 hid_time_addresses[TIME_RTC_CHANNEL_MAX] = {
@@ -55,12 +70,64 @@ static const u32 hid_time_addresses[TIME_RTC_CHANNEL_MAX] = {
 	HID_USAGE_SENSOR_TIME_HOUR,
 	HID_USAGE_SENSOR_TIME_MINUTE,
 	HID_USAGE_SENSOR_TIME_SECOND,
+	HID_USAGE_SENSOR_TIME_MILLISECOND, /* optional */
 };
 
 /* Channel names for verbose error messages */
 static const char * const hid_time_channel_names[TIME_RTC_CHANNEL_MAX] = {
-	"year", "month", "day", "hour", "minute", "second",
+	"year", "month", "day", "hour", "minute", "second", "millisecond",
 };
+
+static void hid_time_hctosys(struct hid_time_state *time_state)
+{
+	struct timespec ts;
+	char msbuf[5];
+	int rc = rtc_valid_tm(&time_state->last_time);
+
+	if (rc) {
+		dev_err(time_state->rtc->dev.parent,
+			"hctosys: invalid date/time\n");
+		return;
+	}
+
+	getnstimeofday(&ts);
+	if (ts.tv_sec >= 86400) /* 1970-01-02 00:00:00 UTC */
+		/*
+		 * Security: don't let a hot-pluggable device change
+		 * a valid system time.
+		 * In absence of a kernel-wide flag like 'systime_was_set',
+		 * we check if the system time is earlier than 1970-01-02.
+		 * Just using a flag inside the RTC subsystem (e.g. from
+		 * hctosys) doesn't work, because the time could be set
+		 * by userspace (NTP, date, user, ...) or something else
+		 * in the kernel too.
+		 * Using a whole day to decide if something else has set the
+		 * time should be enough for even the longest boot to complete
+		 * (including possible forced fscks) and load this module.
+		 */
+		return;
+
+	if (time_state->last_ms != UINT_MAX) {
+		ts.tv_nsec = time_state->last_ms * NSEC_PER_MSEC;
+		snprintf(msbuf, sizeof(msbuf), ":%03d", time_state->last_ms);
+	} else {
+		ts.tv_nsec = NSEC_PER_SEC >> 1;
+		*msbuf = 0;
+	}
+	rtc_tm_to_time(&time_state->last_time, &ts.tv_sec);
+	rc = do_settimeofday(&ts);
+	dev_info(time_state->rtc->dev.parent,
+		"hctosys: setting system clock to "
+		"%d-%02d-%02d %02d:%02d:%02d%s UTC (%u)\n",
+		time_state->last_time.tm_year + 1900,
+		time_state->last_time.tm_mon + 1,
+		time_state->last_time.tm_mday,
+		time_state->last_time.tm_hour,
+		time_state->last_time.tm_min,
+		time_state->last_time.tm_sec,
+		msbuf,
+		(unsigned int) ts.tv_sec);
+}
 
 /* Callback handler to send event after all samples are received and captured */
 static int hid_time_proc_event(struct hid_sensor_hub_device *hsdev,
@@ -71,9 +138,29 @@ static int hid_time_proc_event(struct hid_sensor_hub_device *hsdev,
 
 	spin_lock_irqsave(&time_state->lock_last_time, flags);
 	time_state->last_time = time_state->time_buf;
+	if (time_state->last_ms != UINT_MAX)
+		time_state->last_ms = time_state->ms_buf;
 	spin_unlock_irqrestore(&time_state->lock_last_time, flags);
 	complete(&time_state->comp_last_time);
+	if (unlikely(!hid_time_time_set_once && hid_time_hctosys_enabled)) {
+		hid_time_time_set_once = 1;
+		hid_time_hctosys(time_state);
+	}
 	return 0;
+}
+
+static u32 hid_time_value(size_t raw_len, char *raw_data)
+{
+	switch (raw_len) {
+	case 1:
+		return *(u8 *)raw_data;
+	case 2:
+		return *(u16 *)raw_data;
+	case 4:
+		return *(u32 *)raw_data;
+	default:
+		return (u32)(~0U); /* 0xff... or -1 to denote an error */
+	}
 }
 
 static int hid_time_capture_sample(struct hid_sensor_hub_device *hsdev,
@@ -85,26 +172,38 @@ static int hid_time_capture_sample(struct hid_sensor_hub_device *hsdev,
 
 	switch (usage_id) {
 	case HID_USAGE_SENSOR_TIME_YEAR:
-		time_buf->tm_year = *(u8 *)raw_data;
-		if (time_buf->tm_year < 70)
-			/* assume we are in 1970...2069 */
-			time_buf->tm_year += 100;
+		/*
+		 * The draft for HID-sensors (HUTRR39) currently doesn't define
+		 * the range for the year attribute. Therefor we support
+		 * 8 bit (0-99) and 16 or 32 bits (full) as size for the year.
+		 */
+		if (raw_len == 1) {
+			time_buf->tm_year = *(u8 *)raw_data;
+			if (time_buf->tm_year < 70)
+				/* assume we are in 1970...2069 */
+				time_buf->tm_year += 100;
+		} else
+			time_buf->tm_year =
+				(int)hid_time_value(raw_len, raw_data)-1900;
 		break;
 	case HID_USAGE_SENSOR_TIME_MONTH:
-		/* sensor sending the month as 1-12, we need 0-11 */
-		time_buf->tm_mon = *(u8 *)raw_data-1;
+		/* sensors are sending the month as 1-12, we need 0-11 */
+		time_buf->tm_mon = (int)hid_time_value(raw_len, raw_data)-1;
 		break;
 	case HID_USAGE_SENSOR_TIME_DAY:
-		time_buf->tm_mday = *(u8 *)raw_data;
+		time_buf->tm_mday = (int)hid_time_value(raw_len, raw_data);
 		break;
 	case HID_USAGE_SENSOR_TIME_HOUR:
-		time_buf->tm_hour = *(u8 *)raw_data;
+		time_buf->tm_hour = (int)hid_time_value(raw_len, raw_data);
 		break;
 	case HID_USAGE_SENSOR_TIME_MINUTE:
-		time_buf->tm_min = *(u8 *)raw_data;
+		time_buf->tm_min = (int)hid_time_value(raw_len, raw_data);
 		break;
 	case HID_USAGE_SENSOR_TIME_SECOND:
-		time_buf->tm_sec = *(u8 *)raw_data;
+		time_buf->tm_sec = (int)hid_time_value(raw_len, raw_data);
+		break;
+	case HID_USAGE_SENSOR_TIME_MILLISECOND:
+		time_state->ms_buf = hid_time_value(raw_len, raw_data);
 		break;
 	default:
 		return -EINVAL;
@@ -132,12 +231,18 @@ static int hid_time_parse_report(struct platform_device *pdev,
 {
 	int report_id, i;
 
-	for (i = 0; i < TIME_RTC_CHANNEL_MAX; ++i)
+	/* Check if all required attributes are available */
+	for (i = 0; i < CHANNEL_SCAN_INDEX_MILLISECOND; ++i)
 		if (sensor_hub_input_get_attribute_info(hsdev,
 				HID_INPUT_REPORT, usage_id,
 				hid_time_addresses[i],
 				&time_state->info[i]) < 0)
 			return -EINVAL;
+	if (!sensor_hub_input_get_attribute_info(hsdev, HID_INPUT_REPORT,
+		usage_id, hid_time_addresses[i], &time_state->info[i])) {
+		dev_info(&pdev->dev, "milliseconds supported\n");
+		time_state->last_ms = 0;
+	}
 	/* Check the (needed) attributes for sanity */
 	report_id = time_state->info[0].report_id;
 	if (report_id < 0) {
@@ -145,14 +250,19 @@ static int hid_time_parse_report(struct platform_device *pdev,
 		return -EINVAL;
 	}
 	for (i = 0; i < TIME_RTC_CHANNEL_MAX; ++i) {
+		if (time_state->info[i].attrib_id ==
+				HID_USAGE_SENSOR_TIME_MILLISECOND &&
+				time_state->last_ms == UINT_MAX)
+			continue;
 		if (time_state->info[i].report_id != report_id) {
 			dev_err(&pdev->dev,
 				"not all needed attributes inside the same report!\n");
 			return -EINVAL;
 		}
-		if (time_state->info[i].size != 1) {
+		if (time_state->info[i].size == 3 ||
+				time_state->info[i].size > 4) {
 			dev_err(&pdev->dev,
-				"attribute '%s' not 8 bits wide!\n",
+				"attribute '%s' not 8, 16 or 32 bits wide!\n",
 				hid_time_attrib_name(
 					time_state->info[i].attrib_id));
 			return -EINVAL;
@@ -213,6 +323,19 @@ static const struct rtc_class_ops hid_time_rtc_ops = {
 	.read_time = hid_rtc_read_time,
 };
 
+static void hid_time_request_report_work(struct work_struct *work)
+{
+	struct hid_time_state *time_state =
+		container_of(work, struct hid_time_workts, work)
+			->time_state;
+	/* get a report with all values through requesting one value */
+	sensor_hub_input_attr_get_raw_value(
+		time_state->common_attributes.hsdev, HID_USAGE_SENSOR_TIME,
+		hid_time_addresses[0], time_state->info[0].report_id);
+	time_state->workts = NULL;
+	kfree(work);
+}
+
 static int hid_time_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -222,6 +345,8 @@ static int hid_time_probe(struct platform_device *pdev)
 
 	if (time_state == NULL)
 		return -ENOMEM;
+
+	time_state->last_ms = UINT_MAX;
 
 	platform_set_drvdata(pdev, time_state);
 
@@ -264,13 +389,35 @@ static int hid_time_probe(struct platform_device *pdev)
 		return PTR_ERR(time_state->rtc);
 	}
 
+	if (!hid_time_time_set_once && hid_time_hctosys_enabled) {
+		/*
+		 * Request a HID report to set the time.
+		 * Calling sensor_hub_..._get_raw_value() here directly
+		 * doesn't work, therefor we have to use a work.
+		 */
+		time_state->workts = kmalloc(sizeof(struct hid_time_workts),
+			GFP_KERNEL);
+		if (time_state->workts == NULL)
+			return -ENOMEM;
+		time_state->workts->time_state = time_state;
+		INIT_WORK(&time_state->workts->work,
+			hid_time_request_report_work);
+		schedule_work(&time_state->workts->work);
+	}
+
 	return ret;
 }
 
 static int hid_time_remove(struct platform_device *pdev)
 {
 	struct hid_sensor_hub_device *hsdev = pdev->dev.platform_data;
+	struct hid_time_state *time_state = platform_get_drvdata(pdev);
 
+	if (time_state->workts) {
+		cancel_work_sync(&time_state->workts->work);
+		kfree(time_state->workts);
+		time_state->workts = NULL;
+	}
 	sensor_hub_remove_callback(hsdev, HID_USAGE_SENSOR_TIME);
 
 	return 0;

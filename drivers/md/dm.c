@@ -615,7 +615,8 @@ static void dec_pending(struct dm_io *io, int error)
 	}
 }
 
-static void clone_endio(struct bio *bio, int error)
+static void clone_endio(struct bio *bio, int error,
+			struct batch_complete *batch)
 {
 	int r = 0;
 	struct dm_target_io *tio = bio->bi_private;
@@ -650,7 +651,8 @@ static void clone_endio(struct bio *bio, int error)
 /*
  * Partial completion handling for request-based dm
  */
-static void end_clone_bio(struct bio *clone, int error)
+static void end_clone_bio(struct bio *clone, int error,
+			  struct batch_complete *batch)
 {
 	struct dm_rq_clone_bio_info *info = clone->bi_private;
 	struct dm_rq_target_io *tio = info->tio;
@@ -694,7 +696,7 @@ static void end_clone_bio(struct bio *clone, int error)
 	 * Do not use blk_end_request() here, because it may complete
 	 * the original request before the clone, and break the ordering.
 	 */
-	blk_update_request(tio->orig, 0, nr_bytes);
+	blk_update_request(tio->orig, 0, nr_bytes, NULL);
 }
 
 /*
