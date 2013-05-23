@@ -38,6 +38,7 @@
 #include <linux/blkdev.h>
 #include <linux/compat.h>
 #include <linux/percpu-refcount.h>
+#include <linux/radix-tree.h>
 
 #include <asm/kmap_types.h>
 #include <asm/uaccess.h>
@@ -69,9 +70,7 @@ struct kioctx_cpu {
 struct kioctx {
 	struct percpu_ref	users;
 
-	/* This needs improving */
 	unsigned long		user_id;
-	struct hlist_node	list;
 
 	struct __percpu kioctx_cpu *cpu;
 
@@ -457,10 +456,18 @@ static struct kioctx *ioctx_alloc(unsigned nr_events)
 	aio_nr += ctx->max_reqs;
 	spin_unlock(&aio_nr_lock);
 
-	/* now link into global list. */
+	/* now insert into the radix tree */
+	err = radix_tree_preload(GFP_KERNEL);
+	if (err)
+		goto out_cleanup;
 	spin_lock(&mm->ioctx_lock);
-	hlist_add_head_rcu(&ctx->list, &mm->ioctx_list);
+	err = radix_tree_insert(&mm->ioctx_rtree, ctx->user_id, ctx);
 	spin_unlock(&mm->ioctx_lock);
+	radix_tree_preload_end();
+	if (err) {
+		WARN_ONCE(1, "aio: insert into ioctx tree failed: %d", err);
+		goto out_cleanup;
+	}
 
 	pr_debug("allocated ioctx %p[%ld]: mm=%p mask=0x%x\n",
 		 ctx, ctx->user_id, mm, ctx->nr_events);
@@ -501,8 +508,8 @@ static void kill_ioctx_rcu(struct rcu_head *head)
 static void kill_ioctx(struct kioctx *ctx)
 {
 	if (percpu_ref_kill(&ctx->users)) {
-		hlist_del_rcu(&ctx->list);
-		/* Between hlist_del_rcu() and dropping the initial ref */
+		radix_tree_delete(&current->mm->ioctx_rtree, ctx->user_id);
+		/* Between radix_tree_delete() and dropping the initial ref */
 		synchronize_rcu();
 
 		/*
@@ -542,25 +549,38 @@ EXPORT_SYMBOL(wait_on_sync_kiocb);
  */
 void exit_aio(struct mm_struct *mm)
 {
-	struct kioctx *ctx;
-	struct hlist_node *n;
+	struct kioctx *ctx[16];
+	unsigned long idx = 0;
+	int count;
 
-	hlist_for_each_entry_safe(ctx, n, &mm->ioctx_list, list) {
-		/*
-		 * We don't need to bother with munmap() here -
-		 * exit_mmap(mm) is coming and it'll unmap everything.
-		 * Since aio_free_ring() uses non-zero ->mmap_size
-		 * as indicator that it needs to unmap the area,
-		 * just set it to 0; aio_free_ring() is the only
-		 * place that uses ->mmap_size, so it's safe.
-		 */
-		ctx->mmap_size = 0;
+	do {
+		int i;
 
-		if (percpu_ref_kill(&ctx->users)) {
-			hlist_del_rcu(&ctx->list);
-			call_rcu(&ctx->rcu_head, kill_ioctx_rcu);
+		count = radix_tree_gang_lookup(&mm->ioctx_rtree, (void **)ctx,
+					       idx, sizeof(ctx)/sizeof(void *));
+		for (i = 0; i < count; i++) {
+			void *ret;
+
+			BUG_ON(ctx[i]->user_id < idx);
+			idx = ctx[i]->user_id;
+
+			/*
+			 * We don't need to bother with munmap() here -
+			 * exit_mmap(mm) is coming and it'll unmap everything.
+			 * Since aio_free_ring() uses non-zero ->mmap_size
+			 * as indicator that it needs to unmap the area,
+			 * just set it to 0; aio_free_ring() is the only
+			 * place that uses ->mmap_size, so it's safe.
+			 */
+			ctx[i]->mmap_size = 0;
+
+			if (percpu_ref_kill(&ctx[i]->users)) {
+				ret = radix_tree_delete(&mm->ioctx_rtree, idx);
+				BUG_ON(!ret || ret != ctx[i]);
+				call_rcu(&ctx[i]->rcu_head, kill_ioctx_rcu);
+			}
 		}
-	}
+	} while (count);
 }
 
 static void put_reqs_available(struct kioctx *ctx, unsigned nr)
@@ -665,12 +685,10 @@ static struct kioctx *lookup_ioctx(unsigned long ctx_id)
 
 	rcu_read_lock();
 
-	hlist_for_each_entry_rcu(ctx, &mm->ioctx_list, list) {
-		if (ctx->user_id == ctx_id) {
-			percpu_ref_get(&ctx->users);
-			ret = ctx;
-			break;
-		}
+	ctx = radix_tree_lookup(&mm->ioctx_rtree, ctx_id);
+	if (ctx) {
+		percpu_ref_get(&ctx->users);
+		ret = ctx;
 	}
 
 	rcu_read_unlock();
