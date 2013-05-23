@@ -7084,7 +7084,7 @@ static void btrfs_end_dio_bio(struct bio *bio, int err,
 		bio_io_error(dip->orig_bio);
 	} else {
 		set_bit(BIO_UPTODATE, &dip->dio_bio->bi_flags);
-		bio_endio(dip->orig_bio, 0);
+		bio_endio_batch(dip->orig_bio, 0, batch);
 	}
 out:
 	bio_put(bio);
