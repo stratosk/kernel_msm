@@ -69,7 +69,7 @@
 
 union irq_stack_union {
 	unsigned long stack[IRQ_STACK_SIZE/sizeof(unsigned long)];
-	raw_spinlock_t lock;
+	arch_spinlock_t lock;
 };
 
 DECLARE_PER_CPU(union irq_stack_union, irq_stack_union);
