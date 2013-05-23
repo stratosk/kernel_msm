@@ -1114,14 +1114,21 @@ done:
  */
 int bitmap_find_free_region(unsigned long *bitmap, int bits, int order)
 {
-	int pos, end;		/* scans bitmap by regions of size order */
+	int pos, end, nbit, i;	/* scans bitmap by regions of size order */
+	int nlongs = BITS_TO_LONGS(bits);
 
-	for (pos = 0 ; (end = pos + (1 << order)) <= bits; pos = end) {
-		if (!__reg_op(bitmap, pos, order, REG_OP_ISFREE))
-			continue;
-		__reg_op(bitmap, pos, order, REG_OP_ALLOC);
-		return pos;
-	}
+	for (i = 0; i < nlongs; i++)
+		if (bitmap[i] != ~0UL) {
+			pos = i * BITS_PER_LONG;
+			nbit = min(bits, pos + BITS_PER_LONG);
+			for (; (end = pos + (1 << order)) <= nbit; pos = end) {
+				if (!__reg_op(bitmap, pos, order,
+					REG_OP_ISFREE))
+					continue;
+				__reg_op(bitmap, pos, order, REG_OP_ALLOC);
+				return pos;
+			}
+		}
 	return -ENOMEM;
 }
 EXPORT_SYMBOL(bitmap_find_free_region);
