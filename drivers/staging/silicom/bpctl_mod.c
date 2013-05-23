@@ -35,7 +35,7 @@
 #define BP_MOD_DESCR "Silicom Bypass-SD Control driver"
 #define BP_SYNC_FLAG 1
 
-static int major_num = 0;
+static int major_num;
 
 MODULE_AUTHOR("Anna Lukin, annal@silicom.co.il");
 MODULE_LICENSE("GPL");
@@ -43,12 +43,12 @@ MODULE_DESCRIPTION(BP_MOD_DESCR);
 MODULE_VERSION(BP_MOD_VER);
 spinlock_t bpvm_lock;
 
-#define lock_bpctl() 					\
+#define lock_bpctl()					\
 if (down_interruptible(&bpctl_sema)) {			\
 	return -ERESTARTSYS;				\
 }							\
 
-#define unlock_bpctl() 					\
+#define unlock_bpctl()					\
 	up(&bpctl_sema);
 
 /* Media Types */
@@ -112,7 +112,7 @@ typedef struct _bpctl_dev {
 static bpctl_dev_t *bpctl_dev_arr;
 
 static struct semaphore bpctl_sema;
-static int device_num = 0;
+static int device_num;
 
 static int get_dev_idx(int ifindex);
 static bpctl_dev_t *get_master_port_fn(bpctl_dev_t *pbpctl_dev);
@@ -134,7 +134,7 @@ static int bp_device_event(struct notifier_block *unused,
 			   unsigned long event, void *ptr)
 {
 	struct net_device *dev = ptr;
-	static bpctl_dev_t *pbpctl_dev = NULL, *pbpctl_dev_m = NULL;
+	static bpctl_dev_t *pbpctl_dev, *pbpctl_dev_m;
 	int dev_num = 0, ret = 0, ret_d = 0, time_left = 0;
 	/* printk("BP_PROC_SUPPORT event =%d %s %d\n", event,dev->name, dev->ifindex ); */
 	/* return NOTIFY_DONE; */
@@ -165,7 +165,7 @@ static int bp_device_event(struct notifier_block *unused,
 			memcpy(&cbuf, drvinfo.bus_info, 32);
 			buf = &cbuf[0];
 
-			while (*buf++ != ':') ;
+			while (*buf++ != ':');
 			for (i = 0; i < 10; i++, buf++) {
 				if (*buf == ':')
 					break;
@@ -1415,7 +1415,7 @@ static int wdt_pulse(bpctl_dev_t *pbpctl_dev)
 				 ~(BP10G_MCLK_DATA_OUT | BP10G_MDIO_DATA_OUT)));
 	}
 	if ((pbpctl_dev->wdt_status == WDT_STATUS_EN)	/*&&
-							   (pbpctl_dev->bp_ext_ver<PXG4BPFI_VER) */ )
+							   (pbpctl_dev->bp_ext_ver<PXG4BPFI_VER) */)
 		pbpctl_dev->bypass_wdt_on_time = jiffies;
 #ifdef BP_SYNC_FLAG
 	spin_unlock_irqrestore(&pbpctl_dev->bypass_wr_lock, flags);
@@ -2154,7 +2154,7 @@ static void bp75_release_phy(bpctl_dev_t *pbpctl_dev)
 	if ((pbpctl_dev->func == 1) || (pbpctl_dev->func == 3))
 		mask = BPCTLI_SWFW_PHY1_SM;
 
-	while (bp75_get_hw_semaphore_generic(pbpctl_dev) != 0) ;
+	while (bp75_get_hw_semaphore_generic(pbpctl_dev) != 0);
 	/* Empty */
 
 	swfw_sync = BPCTL_READ_REG(pbpctl_dev, SW_FW_SYNC);
@@ -4334,7 +4334,7 @@ int get_bypass_wd_auto(bpctl_dev_t *pbpctl_dev)
 	return BP_NOT_CAP;
 }
 
-#ifdef  BP_SELF_TEST
+#ifdef BP_SELF_TEST
 
 int set_bp_self_test(bpctl_dev_t *pbpctl_dev, unsigned int param)
 {
@@ -5345,7 +5345,7 @@ static void if_scan_init(void)
 		memcpy(&cbuf, drvinfo.bus_info, 32);
 		buf = &cbuf[0];
 
-		while (*buf++ != ':') ;
+		while (*buf++ != ':');
 		for (i = 0; i < 10; i++, buf++) {
 			if (*buf == ':')
 				break;
@@ -5438,9 +5438,9 @@ static long device_ioctl(struct file *file,	/* see include/linux/fs.h */
 		return -1;
 	}
 
-/*    	preempt_disable();
+/*	preempt_disable();
 	rcu_read_lock();
-      	spin_lock_irqsave(&bpvm_lock, flags);
+	spin_lock_irqsave(&bpvm_lock, flags);
 */
 	if ((bpctl_cmd.in_param[5]) ||
 	    (bpctl_cmd.in_param[6]) || (bpctl_cmd.in_param[7]))
@@ -5787,7 +5787,7 @@ static const struct file_operations Fops = {
 };
 
 #ifndef PCI_DEVICE
-#define PCI_DEVICE(vend,dev) \
+#define PCI_DEVICE(vend, dev) \
 	.vendor = (vend), .device = (dev), \
 	.subvendor = PCI_ANY_ID, .subdevice = PCI_ANY_ID
 #endif
@@ -7263,7 +7263,7 @@ static int show_bypass_slave(struct seq_file *m, void *v)
 	if (!slave)
 		slave = dev;
 	if (!slave)
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	else if (slave->ndev)
 		seq_printf(m, "%s\n", slave->ndev->name);
 	return 0;
@@ -7275,7 +7275,7 @@ static int show_bypass_caps(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = get_bypass_caps_fn(dev);
 	if (ret == BP_NOT_CAP)
-		seq_printf(m, "-1\n");
+		seq_puts(m, "-1\n");
 	else
 		seq_printf(m, "0x%x\n", ret);
 	return 0;
@@ -7287,7 +7287,7 @@ static int show_wd_set_caps(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = get_wd_set_caps_fn(dev);
 	if (ret == BP_NOT_CAP)
-		seq_printf(m, "-1\n");
+		seq_puts(m, "-1\n");
 	else
 		seq_printf(m, "0x%x\n", ret);
 	return 0;
@@ -7333,11 +7333,11 @@ static int show_bypass(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = get_bypass_fn(dev);
 	if (ret == BP_NOT_CAP)
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	else if (ret == 1)
-		seq_printf(m, "on\n");
+		seq_puts(m, "on\n");
 	else if (ret == 0)
-		seq_printf(m, "off\n");
+		seq_puts(m, "off\n");
 	return 0;
 }
 RW_FOPS(bypass)
@@ -7357,11 +7357,11 @@ static int show_tap(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = get_tap_fn(dev);
 	if (ret == BP_NOT_CAP)
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	else if (ret == 1)
-		seq_printf(m, "on\n");
+		seq_puts(m, "on\n");
 	else if (ret == 0)
-		seq_printf(m, "off\n");
+		seq_puts(m, "off\n");
 	return 0;
 }
 RW_FOPS(tap)
@@ -7381,11 +7381,11 @@ static int show_disc(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = get_disc_fn(dev);
 	if (ret == BP_NOT_CAP)
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	else if (ret == 1)
-		seq_printf(m, "on\n");
+		seq_puts(m, "on\n");
 	else if (ret == 0)
-		seq_printf(m, "off\n");
+		seq_puts(m, "off\n");
 	return 0;
 }
 RW_FOPS(disc)
@@ -7395,11 +7395,11 @@ static int show_bypass_change(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = get_bypass_change_fn(dev);
 	if (ret == 1)
-		seq_printf(m, "on\n");
+		seq_puts(m, "on\n");
 	else if (ret == 0)
-		seq_printf(m, "off\n");
+		seq_puts(m, "off\n");
 	else
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	return 0;
 }
 RO_FOPS(bypass_change)
@@ -7409,11 +7409,11 @@ static int show_tap_change(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = get_tap_change_fn(dev);
 	if (ret == 1)
-		seq_printf(m, "on\n");
+		seq_puts(m, "on\n");
 	else if (ret == 0)
-		seq_printf(m, "off\n");
+		seq_puts(m, "off\n");
 	else
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	return 0;
 }
 RO_FOPS(tap_change)
@@ -7423,11 +7423,11 @@ static int show_disc_change(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = get_disc_change_fn(dev);
 	if (ret == 1)
-		seq_printf(m, "on\n");
+		seq_puts(m, "on\n");
 	else if (ret == 0)
-		seq_printf(m, "off\n");
+		seq_puts(m, "off\n");
 	else
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	return 0;
 }
 RO_FOPS(disc_change)
@@ -7450,11 +7450,11 @@ static int show_bypass_wd(struct seq_file *m, void *v)
 
 	ret = get_bypass_wd_fn(dev, &timeout);
 	if (ret == BP_NOT_CAP)
-		seq_printf(m,  "fail\n");
+		seq_puts(m,  "fail\n");
 	else if (timeout == -1)
-		seq_printf(m,  "unknown\n");
+		seq_puts(m,  "unknown\n");
 	else if (timeout == 0)
-		seq_printf(m,  "disable\n");
+		seq_puts(m,  "disable\n");
 	else
 		seq_printf(m, "%d\n", timeout);
 	return 0;
@@ -7467,11 +7467,11 @@ static int show_wd_expire_time(struct seq_file *m, void *v)
 	int ret = 0, timeout = 0;
 	ret = get_wd_expire_time_fn(dev, &timeout);
 	if (ret == BP_NOT_CAP)
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	else if (timeout == -1)
-		seq_printf(m, "expire\n");
+		seq_puts(m, "expire\n");
 	else if (timeout == 0)
-		seq_printf(m, "disable\n");
+		seq_puts(m, "disable\n");
 	else
 		seq_printf(m, "%d\n", timeout);
 	return 0;
@@ -7494,11 +7494,11 @@ static int show_tpl(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = get_tpl_fn(dev);
 	if (ret == BP_NOT_CAP)
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	else if (ret == 1)
-		seq_printf(m, "on\n");
+		seq_puts(m, "on\n");
 	else if (ret == 0)
-		seq_printf(m, "off\n");
+		seq_puts(m, "off\n");
 	return 0;
 }
 RW_FOPS(tpl)
@@ -7520,11 +7520,11 @@ static int show_wait_at_pwup(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = get_bp_wait_at_pwup_fn(dev);
 	if (ret == BP_NOT_CAP)
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	else if (ret == 1)
-		seq_printf(m, "on\n");
+		seq_puts(m, "on\n");
 	else if (ret == 0)
-		seq_printf(m, "off\n");
+		seq_puts(m, "off\n");
 	return 0;
 }
 RW_FOPS(wait_at_pwup)
@@ -7545,11 +7545,11 @@ static int show_hw_reset(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = get_bp_hw_reset_fn(dev);
 	if (ret == BP_NOT_CAP)
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	else if (ret == 1)
-		seq_printf(m, "on\n");
+		seq_puts(m, "on\n");
 	else if (ret == 0)
-		seq_printf(m, "off\n");
+		seq_puts(m, "off\n");
 	return 0;
 }
 RW_FOPS(hw_reset)
@@ -7561,11 +7561,11 @@ static int show_reset_bypass_wd(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = reset_bypass_wd_timer_fn(dev);
 	if (ret == BP_NOT_CAP)
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	else if (ret == 0)
-		seq_printf(m, "disable\n");
+		seq_puts(m, "disable\n");
 	else if (ret == 1)
-		seq_printf(m, "success\n");
+		seq_puts(m, "success\n");
 	return 0;
 }
 RO_FOPS(reset_bypass_wd)
@@ -7585,11 +7585,11 @@ static int show_dis_bypass(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = get_dis_bypass_fn(dev);
 	if (ret == BP_NOT_CAP)
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	else if (ret == 0)
-		seq_printf(m, "off\n");
+		seq_puts(m, "off\n");
 	else
-		seq_printf(m, "on\n");
+		seq_puts(m, "on\n");
 	return 0;
 }
 RW_FOPS(dis_bypass)
@@ -7609,11 +7609,11 @@ static int show_dis_tap(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = get_dis_tap_fn(dev);
 	if (ret == BP_NOT_CAP)
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	else if (ret == 0)
-		seq_printf(m, "off\n");
+		seq_puts(m, "off\n");
 	else
-		seq_printf(m, "on\n");
+		seq_puts(m, "on\n");
 	return 0;
 }
 RW_FOPS(dis_tap)
@@ -7633,11 +7633,11 @@ static int show_dis_disc(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = get_dis_disc_fn(dev);
 	if (ret == BP_NOT_CAP)
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	else if (ret == 0)
-		seq_printf(m, "off\n");
+		seq_puts(m, "off\n");
 	else
-		seq_printf(m, "on\n");
+		seq_puts(m, "on\n");
 	return 0;
 }
 RW_FOPS(dis_disc)
@@ -7657,11 +7657,11 @@ static int show_bypass_pwup(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = get_bypass_pwup_fn(dev);
 	if (ret == BP_NOT_CAP)
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	else if (ret == 0)
-		seq_printf(m, "off\n");
+		seq_puts(m, "off\n");
 	else
-		seq_printf(m, "on\n");
+		seq_puts(m, "on\n");
 	return 0;
 }
 RW_FOPS(bypass_pwup)
@@ -7681,11 +7681,11 @@ static int show_bypass_pwoff(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = get_bypass_pwoff_fn(dev);
 	if (ret == BP_NOT_CAP)
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	else if (ret == 0)
-		seq_printf(m, "off\n");
+		seq_puts(m, "off\n");
 	else
-		seq_printf(m, "on\n");
+		seq_puts(m, "on\n");
 	return 0;
 }
 RW_FOPS(bypass_pwoff)
@@ -7705,11 +7705,11 @@ static int show_tap_pwup(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = get_tap_pwup_fn(dev);
 	if (ret == BP_NOT_CAP)
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	else if (ret == 0)
-		seq_printf(m, "off\n");
+		seq_puts(m, "off\n");
 	else
-		seq_printf(m, "on\n");
+		seq_puts(m, "on\n");
 	return 0;
 }
 RW_FOPS(tap_pwup)
@@ -7729,11 +7729,11 @@ static int show_disc_pwup(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = get_disc_pwup_fn(dev);
 	if (ret == BP_NOT_CAP)
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	else if (ret == 0)
-		seq_printf(m, "off\n");
+		seq_puts(m, "off\n");
 	else
-		seq_printf(m, "on\n");
+		seq_puts(m, "on\n");
 	return 0;
 }
 RW_FOPS(disc_pwup)
@@ -7753,11 +7753,11 @@ static int show_std_nic(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = get_std_nic_fn(dev);
 	if (ret == BP_NOT_CAP)
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	else if (ret == 0)
-		seq_printf(m, "off\n");
+		seq_puts(m, "off\n");
 	else
-		seq_printf(m, "on\n");
+		seq_puts(m, "on\n");
 	return 0;
 }
 RW_FOPS(std_nic)
@@ -7795,13 +7795,13 @@ static int show_wd_exp_mode(struct seq_file *m, void *v)
 	bpctl_dev_t *dev = m->private;
 	int ret = get_wd_exp_mode_fn(dev);
 	if (ret == 1)
-		seq_printf(m, "tap\n");
+		seq_puts(m, "tap\n");
 	else if (ret == 0)
-		seq_printf(m, "bypass\n");
+		seq_puts(m, "bypass\n");
 	else if (ret == 2)
-		seq_printf(m, "disc\n");
+		seq_puts(m, "disc\n");
 	else
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	return 0;
 }
 RW_FOPS(wd_exp_mode)
@@ -7823,7 +7823,7 @@ static int show_wd_autoreset(struct seq_file *m, void *v)
 	if (ret >= 0)
 		seq_printf(m, "%d\n", ret);
 	else
-		seq_printf(m, "fail\n");
+		seq_puts(m, "fail\n");
 	return 0;
 }
 RW_FOPS(wd_autoreset)
@@ -7831,7 +7831,7 @@ RW_FOPS(wd_autoreset)
 int bypass_proc_create_dev_sd(bpctl_dev_t *pbp_device_block)
 {
 	struct bypass_pfs_sd *current_pfs = &(pbp_device_block->bypass_pfs_set);
-	static struct proc_dir_entry *procfs_dir = NULL;
+	static struct proc_dir_entry *procfs_dir;
 	int ret = 0;
 
 	if (!pbp_device_block->ndev)

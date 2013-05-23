@@ -2533,9 +2533,8 @@ static void _dwc2_hcd_endpoint_reset(struct usb_hcd *hcd,
 static irqreturn_t _dwc2_hcd_irq(struct usb_hcd *hcd)
 {
 	struct dwc2_hsotg *hsotg = dwc2_hcd_to_hsotg(hcd);
-	int retval = dwc2_hcd_intr(hsotg);
 
-	return IRQ_RETVAL(retval);
+	return dwc2_handle_hcd_intr(hsotg);
 }
 
 /*
@@ -2702,7 +2701,7 @@ EXPORT_SYMBOL_GPL(dwc2_set_all_params);
  * a negative error on failure.
  */
 int dwc2_hcd_init(struct dwc2_hsotg *hsotg, int irq,
-		  struct dwc2_core_params *params)
+		  const struct dwc2_core_params *params)
 {
 	struct usb_hcd *hcd;
 	struct dwc2_host_chan *channel;
@@ -2920,7 +2919,7 @@ int dwc2_hcd_init(struct dwc2_hsotg *hsotg, int irq,
 	 * allocates the DMA buffer pool, registers the USB bus, requests the
 	 * IRQ line, and calls hcd_start method.
 	 */
-	retval = usb_add_hcd(hcd, irq, IRQF_SHARED | IRQF_DISABLED);
+	retval = usb_add_hcd(hcd, irq, IRQF_SHARED);
 	if (retval < 0)
 		goto error3;
 

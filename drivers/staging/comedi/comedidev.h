@@ -14,11 +14,6 @@
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
-
 */
 
 #ifndef _COMEDIDEV_H
@@ -351,6 +346,13 @@ int comedi_alloc_subdevices(struct comedi_device *, int);
 
 void comedi_spriv_free(struct comedi_device *, int subdev_num);
 
+int comedi_load_firmware(struct comedi_device *, struct device *,
+			 const char *name,
+			 int (*cb)(struct comedi_device *,
+				   const u8 *data, size_t size,
+				   unsigned long context),
+			 unsigned long context);
+
 int __comedi_request_region(struct comedi_device *,
 			    unsigned long start, unsigned long len);
 int comedi_request_region(struct comedi_device *,
@@ -489,6 +491,7 @@ struct usb_driver;
 struct usb_interface;
 
 struct usb_interface *comedi_to_usb_interface(struct comedi_device *);
+struct usb_device *comedi_to_usb_dev(struct comedi_device *);
 
 int comedi_usb_auto_config(struct usb_interface *, struct comedi_driver *,
 			   unsigned long context);

@@ -278,7 +278,7 @@ static void parity_scan(struct ch_struct *ch, unsigned char *cbuf,
 		switch (ch->ch_pscan_state) {
 		default:
 			/* reset to sanity and fall through */
-			ch->ch_pscan_state = 0 ;
+			ch->ch_pscan_state = 0;
 
 		case 0:
 			/* No FF seen yet */
@@ -3083,7 +3083,7 @@ check_query:
 						nd->nd_hw_ver = (b[8] << 8) | b[9];
 						nd->nd_sw_ver = (b[10] << 8) | b[11];
 						nd->nd_hw_id = b[6];
-						desclen = ((plen - 12) > MAX_DESC_LEN) ? MAX_DESC_LEN :
+						desclen = (plen - 12 > MAX_DESC_LEN - 1) ? MAX_DESC_LEN - 1 :
 							plen - 12;
 
 						if (desclen <= 0) {

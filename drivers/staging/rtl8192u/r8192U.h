@@ -88,7 +88,7 @@
 #define DMESGE(x,a...)
 extern u32 rt_global_debug_component;
 #define RT_TRACE(component, x, args...) \
-do { if(rt_global_debug_component & component) \
+do { if (rt_global_debug_component & component) \
 	printk(KERN_DEBUG RTL819xU_MODULE_NAME ":" x "\n" , \
 	       ##args);\
 }while(0);
@@ -137,7 +137,7 @@ do { if(rt_global_debug_component & component) \
 #ifdef RTL819x_DEBUG
 #define assert(expr) \
 	if (!(expr)) {                                  \
-		printk( "Assertion failed! %s,%s,%s,line=%d\n", \
+		printk("Assertion failed! %s,%s,%s,line=%d\n", \
 		#expr,__FILE__,__FUNCTION__,__LINE__);          \
 	}
 //wb added to debug out data buf
@@ -146,7 +146,7 @@ do { if(rt_global_debug_component & component) \
 	do{ if ((rt_global_debug_component & (level)) == (level))   \
 		{       \
 			int i;                                  \
-			u8* pdata = (u8*) data;                 \
+			u8 *pdata = (u8 *) data;                 \
 			printk(KERN_DEBUG RTL819xU_MODULE_NAME ": %s()\n", __FUNCTION__);   \
 			for(i=0; i<(int)(datalen); i++)                 \
 			{                                               \
@@ -1200,7 +1200,7 @@ struct ssid_thread {
 
 bool init_firmware(struct net_device *dev);
 short rtl819xU_tx_cmd(struct net_device *dev, struct sk_buff *skb);
-short rtl8192_tx(struct net_device *dev, struct sk_buff* skb);
+short rtl8192_tx(struct net_device *dev, struct sk_buff *skb);
 
 u32 read_cam(struct net_device *dev, u8 addr);
 void write_cam(struct net_device *dev, u8 addr, u32 data);
@@ -1239,7 +1239,7 @@ void rtl8192_set_rxconf(struct net_device *dev);
 extern void rtl819xusb_beacon_tx(struct net_device *dev,u16  tx_rate);
 
 void EnableHWSecurityConfig8192(struct net_device *dev);
-void setKey(struct net_device *dev, u8 EntryNo, u8 KeyIndex, u16 KeyType, u8 *MacAddr, u8 DefaultKey, u32 *KeyContent );
+void setKey(struct net_device *dev, u8 EntryNo, u8 KeyIndex, u16 KeyType, u8 *MacAddr, u8 DefaultKey, u32 *KeyContent);
 
 
 #endif

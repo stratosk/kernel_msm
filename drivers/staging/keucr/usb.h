@@ -1,4 +1,4 @@
-// Driver for USB Mass Storage compliant devices
+/* Driver for USB Mass Storage compliant devices */
 
 #ifndef _USB_H_
 #define _USB_H_
@@ -26,19 +26,19 @@ struct us_unusual_dev {
 	int (*initFunction)(struct us_data *);
 };
 
-//EnE HW Register
+/* EnE HW Register */
 #define REG_CARD_STATUS     0xFF83
 #define REG_HW_TRAP1        0xFF89
 
-// SRB Status. Refers /usr/include/wine/wine/wnaspi32.h & SCSI sense key
-#define SS_SUCCESS                  0x00      // No Sense
+/* SRB Status. Refers /usr/include/wine/wine/wnaspi32.h & SCSI sense key */
+#define SS_SUCCESS                  0x00      /* No Sense */
 #define SS_NOT_READY                0x02
 #define SS_MEDIUM_ERR               0x03
 #define SS_HW_ERR                   0x04
 #define SS_ILLEGAL_REQUEST          0x05
 #define SS_UNIT_ATTENTION           0x06
 
-//ENE Load FW Pattern
+/* ENE Load FW Pattern */
 #define SD_INIT1_PATTERN   1
 #define SD_INIT2_PATTERN   2
 #define SD_RW_PATTERN      3
@@ -52,38 +52,39 @@ struct us_unusual_dev {
 #define FDIR_READ         1
 
 typedef struct _SD_STATUS {
-    BYTE    Insert:1;
-    BYTE    Ready:1;
-    BYTE    MediaChange:1;
-    BYTE    IsMMC:1;
-    BYTE    HiCapacity:1;
-    BYTE    HiSpeed:1;
-    BYTE    WtP:1;
-    BYTE    Reserved:1;
+	BYTE    Insert:1;
+	BYTE    Ready:1;
+	BYTE    MediaChange:1;
+	BYTE    IsMMC:1;
+	BYTE    HiCapacity:1;
+	BYTE    HiSpeed:1;
+	BYTE    WtP:1;
+	BYTE    Reserved:1;
 } SD_STATUS, *PSD_STATUS;
 
 typedef struct _MS_STATUS {
-    BYTE    Insert:1;
-    BYTE    Ready:1;
-    BYTE    MediaChange:1;
-    BYTE    IsMSPro:1;
-    BYTE    IsMSPHG:1;
-    BYTE    Reserved1:1;
-    BYTE    WtP:1;
-    BYTE    Reserved2:1;
+	BYTE    Insert:1;
+	BYTE    Ready:1;
+	BYTE    MediaChange:1;
+	BYTE    IsMSPro:1;
+	BYTE    IsMSPHG:1;
+	BYTE    Reserved1:1;
+	BYTE    WtP:1;
+	BYTE    Reserved2:1;
 } MS_STATUS, *PMS_STATUS;
 
 typedef struct _SM_STATUS {
-    BYTE    Insert:1;
-    BYTE    Ready:1;
-    BYTE    MediaChange:1;
-    BYTE    Reserved:3;
-    BYTE    WtP:1;
-    BYTE    IsMS:1;
+	BYTE    Insert:1;
+	BYTE    Ready:1;
+	BYTE    MediaChange:1;
+	BYTE    Reserved:3;
+	BYTE    WtP:1;
+	BYTE    IsMS:1;
 } SM_STATUS, *PSM_STATUS;
 
-// SD Block Length
-#define SD_BLOCK_LEN                            9       // 2^9 = 512 Bytes, The HW maximum read/write data length
+/* SD Block Length */
+#define SD_BLOCK_LEN		9	/* 2^9 = 512 Bytes,
+				The HW maximum read/write data length */
 
 /* Dynamic bitflag definitions (us->dflags): used in set_bit() etc. */
 #define US_FLIDX_URB_ACTIVE	0	/* current_urb is in use    */
@@ -176,19 +177,19 @@ struct us_data {
 #ifdef CONFIG_PM
 	pm_hook			suspend_resume_hook;
 #endif
-	// for 6250 code
+	/* for 6250 code */
 	SD_STATUS   SD_Status;
 	MS_STATUS   MS_Status;
 	SM_STATUS   SM_Status;
 
-	//----- SD Control Data ----------------
-	//SD_REGISTER SD_Regs;
+	/* ----- SD Control Data ---------------- */
+	/* SD_REGISTER SD_Regs; */
 	WORD        SD_Block_Mult;
 	BYTE        SD_READ_BL_LEN;
 	WORD        SD_C_SIZE;
 	BYTE        SD_C_SIZE_MULT;
 
-	// SD/MMC New spec.
+	/* SD/MMC New spec. */
 	BYTE        SD_SPEC_VER;
 	BYTE        SD_CSD_VER;
 	BYTE        SD20_HIGH_CAPACITY;
@@ -196,15 +197,15 @@ struct us_data {
 	BYTE        MMC_SPEC_VER;
 	BYTE        MMC_BusWidth;
 	BYTE        MMC_HIGH_CAPACITY;
-	
-	//----- MS Control Data ----------------
+
+	/* ----- MS Control Data ---------------- */
 	BOOLEAN             MS_SWWP;
 	DWORD               MSP_TotalBlock;
 	/* MS_LibControl       MS_Lib; */
 	BOOLEAN             MS_IsRWPage;
 	WORD                MS_Model;
 
-	//----- SM Control Data ----------------
+	/* ----- SM Control Data ---------------- */
 	BYTE		SM_DeviceID;
 	BYTE		SM_CardID;
 
@@ -212,16 +213,18 @@ struct us_data {
 	BYTE		BIN_FLAG;
 	DWORD		bl_num;
 	int		SrbStatus;
-	
-	//------Power Managerment ---------------
+
+	/* ------Power Managerment --------------- */
 	BOOLEAN         Power_IsResum;	
 };
 
 /* Convert between us_data and the corresponding Scsi_Host */
-static inline struct Scsi_Host *us_to_host(struct us_data *us) {
+static inline struct Scsi_Host *us_to_host(struct us_data *us)
+{
 	return container_of((void *) us, struct Scsi_Host, hostdata);
 }
-static inline struct us_data *host_to_us(struct Scsi_Host *host) {
+static inline struct us_data *host_to_us(struct Scsi_Host *host)
+{
 	return (struct us_data *) host->hostdata;
 }
 

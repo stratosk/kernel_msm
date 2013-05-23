@@ -18,12 +18,6 @@
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
-
-************************************************************************
 */
 /*
 Driver: ni_labpc_cs
@@ -76,12 +70,9 @@ NI manuals:
 static const struct labpc_boardinfo labpc_cs_boards[] = {
 	{
 		.name			= "daqcard-1200",
-		.device_id		= 0x103,
 		.ai_speed		= 10000,
-		.register_layout	= labpc_1200_layout,
 		.has_ao			= 1,
-		.ai_range_table		= &range_labpc_1200_ai,
-		.ai_range_code		= labpc_1200_ai_gain_bits,
+		.is_labpc1200		= 1,
 	},
 };
 
