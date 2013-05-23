@@ -22,7 +22,6 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
-#include <linux/irqchip.h>
 #include <linux/platform_device.h>
 #include <linux/of_platform.h>
 #include <linux/delay.h>
@@ -61,29 +60,16 @@ void __init sh73a0_map_io(void)
 	iotable_init(sh73a0_io_desc, ARRAY_SIZE(sh73a0_io_desc));
 }
 
-static struct resource sh73a0_pfc_resources[] = {
-	[0] = {
-		.start	= 0xe6050000,
-		.end	= 0xe6057fff,
-		.flags	= IORESOURCE_MEM,
-	},
-	[1] = {
-		.start	= 0xe605801c,
-		.end	= 0xe6058027,
-		.flags	= IORESOURCE_MEM,
-	}
-};
-
-static struct platform_device sh73a0_pfc_device = {
-	.name		= "pfc-sh73a0",
-	.id		= -1,
-	.resource	= sh73a0_pfc_resources,
-	.num_resources	= ARRAY_SIZE(sh73a0_pfc_resources),
+/* PFC */
+static const struct resource pfc_resources[] = {
+	DEFINE_RES_MEM(0xe6050000, 0x8000),
+	DEFINE_RES_MEM(0xe605801c, 0x000c),
 };
 
 void __init sh73a0_pinmux_init(void)
 {
-	platform_device_register(&sh73a0_pfc_device);
+	platform_device_register_simple("pfc-sh73a0", -1, pfc_resources,
+					ARRAY_SIZE(pfc_resources));
 }
 
 static struct plat_sci_port scif0_platform_data = {
@@ -248,37 +234,6 @@ static struct platform_device scif8_device = {
 	},
 };
 
-static struct sh_timer_config cmt10_platform_data = {
-	.name = "CMT10",
-	.channel_offset = 0x10,
-	.timer_bit = 0,
-	.clockevent_rating = 125,
-	.clocksource_rating = 125,
-};
-
-static struct resource cmt10_resources[] = {
-	[0] = {
-		.name	= "CMT10",
-		.start	= 0xe6138010,
-		.end	= 0xe613801b,
-		.flags	= IORESOURCE_MEM,
-	},
-	[1] = {
-		.start	= gic_spi(65),
-		.flags	= IORESOURCE_IRQ,
-	},
-};
-
-static struct platform_device cmt10_device = {
-	.name		= "sh_cmt",
-	.id		= 10,
-	.dev = {
-		.platform_data	= &cmt10_platform_data,
-	},
-	.resource	= cmt10_resources,
-	.num_resources	= ARRAY_SIZE(cmt10_resources),
-};
-
 /* TMU */
 static struct sh_timer_config tmu00_platform_data = {
 	.name = "TMU00",
@@ -288,12 +243,7 @@ static struct sh_timer_config tmu00_platform_data = {
 };
 
 static struct resource tmu00_resources[] = {
-	[0] = {
-		.name	= "TMU00",
-		.start	= 0xfff60008,
-		.end	= 0xfff60013,
-		.flags	= IORESOURCE_MEM,
-	},
+	[0] = DEFINE_RES_MEM_NAMED(0xfff60008, 0xc, "TMU00"),
 	[1] = {
 		.start	= intcs_evt2irq(0x0e80), /* TMU0_TUNI00 */
 		.flags	= IORESOURCE_IRQ,
@@ -318,12 +268,7 @@ static struct sh_timer_config tmu01_platform_data = {
 };
 
 static struct resource tmu01_resources[] = {
-	[0] = {
-		.name	= "TMU01",
-		.start	= 0xfff60014,
-		.end	= 0xfff6001f,
-		.flags	= IORESOURCE_MEM,
-	},
+	[0] = DEFINE_RES_MEM_NAMED(0xfff60014, 0xc, "TMU00"),
 	[1] = {
 		.start	= intcs_evt2irq(0x0ea0), /* TMU0_TUNI01 */
 		.flags	= IORESOURCE_IRQ,
@@ -341,12 +286,7 @@ static struct platform_device tmu01_device = {
 };
 
 static struct resource i2c0_resources[] = {
-	[0] = {
-		.name	= "IIC0",
-		.start	= 0xe6820000,
-		.end	= 0xe6820425 - 1,
-		.flags	= IORESOURCE_MEM,
-	},
+	[0] = DEFINE_RES_MEM_NAMED(0xe6820000, 0x426, "IIC0"),
 	[1] = {
 		.start	= gic_spi(167),
 		.end	= gic_spi(170),
@@ -355,12 +295,7 @@ static struct resource i2c0_resources[] = {
 };
 
 static struct resource i2c1_resources[] = {
-	[0] = {
-		.name	= "IIC1",
-		.start	= 0xe6822000,
-		.end	= 0xe6822425 - 1,
-		.flags	= IORESOURCE_MEM,
-	},
+	[0] = DEFINE_RES_MEM_NAMED(0xe6822000, 0x426, "IIC1"),
 	[1] = {
 		.start	= gic_spi(51),
 		.end	= gic_spi(54),
@@ -369,12 +304,7 @@ static struct resource i2c1_resources[] = {
 };
 
 static struct resource i2c2_resources[] = {
-	[0] = {
-		.name	= "IIC2",
-		.start	= 0xe6824000,
-		.end	= 0xe6824425 - 1,
-		.flags	= IORESOURCE_MEM,
-	},
+	[0] = DEFINE_RES_MEM_NAMED(0xe6824000, 0x426, "IIC2"),
 	[1] = {
 		.start	= gic_spi(171),
 		.end	= gic_spi(174),
@@ -383,12 +313,7 @@ static struct resource i2c2_resources[] = {
 };
 
 static struct resource i2c3_resources[] = {
-	[0] = {
-		.name	= "IIC3",
-		.start	= 0xe6826000,
-		.end	= 0xe6826425 - 1,
-		.flags	= IORESOURCE_MEM,
-	},
+	[0] = DEFINE_RES_MEM_NAMED(0xe6826000, 0x426, "IIC3"),
 	[1] = {
 		.start	= gic_spi(183),
 		.end	= gic_spi(186),
@@ -397,12 +322,7 @@ static struct resource i2c3_resources[] = {
 };
 
 static struct resource i2c4_resources[] = {
-	[0] = {
-		.name	= "IIC4",
-		.start	= 0xe6828000,
-		.end	= 0xe6828425 - 1,
-		.flags	= IORESOURCE_MEM,
-	},
+	[0] = DEFINE_RES_MEM_NAMED(0xe6828000, 0x426, "IIC4"),
 	[1] = {
 		.start	= gic_spi(187),
 		.end	= gic_spi(190),
@@ -623,12 +543,7 @@ static struct sh_dmae_pdata sh73a0_dmae_platform_data = {
 };
 
 static struct resource sh73a0_dmae_resources[] = {
-	{
-		/* Registers including DMAOR and channels including DMARSx */
-		.start  = 0xfe000020,
-		.end    = 0xfe008a00 - 1,
-		.flags  = IORESOURCE_MEM,
-	},
+	DEFINE_RES_MEM(0xfe000020, 0x89e0),
 	{
 		.name	= "error_irq",
 		.start  = gic_spi(129),
@@ -727,18 +642,10 @@ static struct sh_dmae_pdata sh73a0_mpdma_platform_data = {
 
 /* Resource order important! */
 static struct resource sh73a0_mpdma_resources[] = {
-	{
-		/* Channel registers and DMAOR */
-		.start	= 0xec618020,
-		.end	= 0xec61828f,
-		.flags	= IORESOURCE_MEM,
-	},
-	{
-		/* DMARSx */
-		.start	= 0xec619000,
-		.end	= 0xec61900b,
-		.flags	= IORESOURCE_MEM,
-	},
+	/* Channel registers and DMAOR */
+	DEFINE_RES_MEM(0xec618020, 0x270),
+	/* DMARSx */
+	DEFINE_RES_MEM(0xec619000, 0xc),
 	{
 		.name	= "error_irq",
 		.start	= gic_spi(181),
@@ -785,12 +692,7 @@ static struct platform_device pmu_device = {
 
 /* an IPMMU module for ICB */
 static struct resource ipmmu_resources[] = {
-	[0] = {
-		.name	= "IPMMU",
-		.start	= 0xfe951000,
-		.end	= 0xfe9510ff,
-		.flags	= IORESOURCE_MEM,
-	},
+	DEFINE_RES_MEM_NAMED(0xfe951000, 0x100, "IPMMU"),
 };
 
 static const char * const ipmmu_dev_names[] = {
@@ -943,7 +845,6 @@ static struct platform_device *sh73a0_devices_dt[] __initdata = {
 	&scif6_device,
 	&scif7_device,
 	&scif8_device,
-	&cmt10_device,
 };
 
 static struct platform_device *sh73a0_early_devices[] __initdata = {
@@ -1016,6 +917,8 @@ static const struct of_dev_auxdata sh73a0_auxdata_lookup[] __initconst = {
 
 void __init sh73a0_add_standard_devices_dt(void)
 {
+	struct platform_device_info devinfo = { .name = "cpufreq-cpu0", .id = -1, };
+
 	/* clocks are setup late during boot in the case of DT */
 	sh73a0_clock_init();
 
@@ -1023,6 +926,9 @@ void __init sh73a0_add_standard_devices_dt(void)
 			     ARRAY_SIZE(sh73a0_devices_dt));
 	of_platform_populate(NULL, of_default_bus_match_table,
 			     sh73a0_auxdata_lookup, NULL);
+
+	/* Instantiate cpufreq-cpu0 */
+	platform_device_register_full(&devinfo);
 }
 
 static const char *sh73a0_boards_compat_dt[] __initdata = {
@@ -1035,7 +941,6 @@ DT_MACHINE_START(SH73A0_DT, "Generic SH73A0 (Flattened Device Tree)")
 	.map_io		= sh73a0_map_io,
 	.init_early	= sh73a0_init_delay,
 	.nr_irqs	= NR_IRQS_LEGACY,
-	.init_irq	= irqchip_init,
 	.init_machine	= sh73a0_add_standard_devices_dt,
 	.dt_compat	= sh73a0_boards_compat_dt,
 MACHINE_END

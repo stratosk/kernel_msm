@@ -1,0 +1,45 @@
+* Renesas SH Mobile Timer
+
+Bindings for several timer devices from Renesas including CMT, TMU and MTU2.
+
+Required properties:
+- compatible : Should be "renesas,{device}-timer",
+  whereas device is "cmt", "tmu" or "mtu2".
+- reg : Address and length of the register set for the device
+- interrupts : Timer interrupt
+- renesas,device-id : The ID of the timer device
+- renesas,channel-id : The channel ID of the timer device
+- renesas,source-quality : The viability to use this device as a free
+  running clock. From 0 (do not use) to 10 (best possible clock).
+- renesas,event-quality : The viability to use this device as an event
+  generator. From 0 (do not use) to 10 (best possible clock).
+
+The properties renesas,{source,event}-quality reflect the situation that the
+usability of the timer devices depend on the location within their SoCs. E.g.
+the power domain affinty affects power management, some mux-ed lines might be
+preferred to be assigned to other functions and other constraints.
+
+Example for CMT1 channel 0 on the R8A7740 SoC:
+
+	timer@e6138010 {
+		compatible = "renesas,cmt-timer";
+		interrupt-parent = <&intca>;
+		reg = <0xe6138010 0xc>;
+		interrupts = <0x0b00>;
+		renesas,device-id = <1>;
+		renesas,channel-id = <0>;
+		renesas,source-quality = <3>;
+		renesas,event-quality = <3>;
+	};
+
+Example for TMU0 channel 1 on the SH7372 SoC:
+	timer@fff60014 {
+		compatible = "renesas,tmu-timer";
+		interrupt-parent = <&intcs>;
+		reg = <0xfff60014 0xc>;
+		interrupts = <0xea0>;
+		renesas,device-id = <0>;
+		renesas,channel-id = <1>;
+		renesas,source-quality = <4>;
+		renesas,event-quality = <0>;
+	};

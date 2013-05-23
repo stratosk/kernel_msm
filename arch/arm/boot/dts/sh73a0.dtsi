@@ -179,6 +179,17 @@
 			      0 190 0x4>;
 	};
 
+	timer@e6138010 {
+		compatible = "renesas,cmt-timer";
+		interrupt-parent = <&gic>;
+		reg = <0xe6138010 0xc>;
+		interrupts = <0 65 0x4>;
+		renesas,device-id = <1>;
+		renesas,channel-id = <0>;
+		renesas,source-quality = <3>;
+		renesas,event-quality = <3>;
+	};
+
 	mmcif: mmcif@0x10010000 {
 		compatible = "renesas,sh-mmcif";
 		reg = <0xe6bd0000 0x100>;
