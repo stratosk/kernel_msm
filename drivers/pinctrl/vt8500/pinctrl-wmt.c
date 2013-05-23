@@ -569,10 +569,10 @@ int wmt_pinctrl_probe(struct platform_device *pdev,
 	struct resource *res;
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	data->base = devm_request_and_ioremap(&pdev->dev, res);
-	if (!data->base) {
+	data->base = devm_ioremap_resource(&pdev->dev, res);
+	if (IS_ERR(data->base)) {
 		dev_err(&pdev->dev, "failed to map memory resource\n");
-		return -EBUSY;
+		return PTR_ERR(data->base);
 	}
 
 	wmt_desc.pins = data->pins;
@@ -609,8 +609,7 @@ int wmt_pinctrl_probe(struct platform_device *pdev,
 	return 0;
 
 fail_range:
-	err = gpiochip_remove(&data->gpio_chip);
-	if (err)
+	if (gpiochip_remove(&data->gpio_chip))
 		dev_err(&pdev->dev, "failed to remove gpio chip\n");
 fail_gpio:
 	pinctrl_unregister(data->pctl_dev);
