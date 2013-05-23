@@ -147,6 +147,7 @@
 		reg = <0x0a>;
 		VDDA-supply = <&reg_3p2v>;
 		VDDIO-supply = <&reg_3p2v>;
+		clocks = <&clks 150>;
 	};
 };
 
@@ -267,4 +268,12 @@
 	phy-mode = "rmii";
 	phy-reset-gpios = <&gpio7 6 0>;
 	status = "okay";
+};
+
+&usbh1 {
+       status = "okay";
+};
+
+&usbotg {
+       status = "okay";
 };
