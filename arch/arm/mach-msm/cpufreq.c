@@ -441,8 +441,7 @@ static int __init msm_cpufreq_register(void)
 		per_cpu(cpufreq_suspend, cpu).device_suspended = 0;
 	}
 
-	msm_cpufreq_wq = alloc_workqueue("msm-cpufreq",
-			WQ_MEM_RECLAIM | WQ_HIGHPRI, 1);
+	msm_cpufreq_wq = alloc_workqueue("msm-cpufreq", WQ_HIGHPRI, 0);
 	register_hotcpu_notifier(&msm_cpufreq_cpu_notifier);
 	register_early_suspend(&msm_cpu_early_suspend_handler);
 	return cpufreq_register_driver(&msm_cpufreq_driver);
