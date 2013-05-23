@@ -37,7 +37,6 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/of_gpio.h>
-#include <linux/pinctrl/consumer.h>
 
 #include <linux/platform_data/spi-imx.h>
 
@@ -760,7 +759,6 @@ static int spi_imx_probe(struct platform_device *pdev)
 	struct spi_master *master;
 	struct spi_imx_data *spi_imx;
 	struct resource *res;
-	struct pinctrl *pinctrl;
 	int i, ret, num_cs;
 
 	if (!np && !mxc_platform_info) {
@@ -848,12 +846,6 @@ static int spi_imx_probe(struct platform_device *pdev)
 		goto out_iounmap;
 	}
 
-	pinctrl = devm_pinctrl_get_select_default(&pdev->dev);
-	if (IS_ERR(pinctrl)) {
-		ret = PTR_ERR(pinctrl);
-		goto out_free_irq;
-	}
-
 	spi_imx->clk_ipg = devm_clk_get(&pdev->dev, "ipg");
 	if (IS_ERR(spi_imx->clk_ipg)) {
 		ret = PTR_ERR(spi_imx->clk_ipg);
@@ -902,7 +894,6 @@ out_gpio_free:
 	}
 	spi_master_put(master);
 	kfree(master);
-	platform_set_drvdata(pdev, NULL);
 	return ret;
 }
 
@@ -928,8 +919,6 @@ static int spi_imx_remove(struct platform_device *pdev)
 	spi_master_put(master);
 
 	release_mem_region(res->start, resource_size(res));
-
-	platform_set_drvdata(pdev, NULL);
 
 	return 0;
 }

@@ -1104,6 +1104,7 @@ static int ep93xx_spi_probe(struct platform_device *pdev)
 	espi->wq = create_singlethread_workqueue("ep93xx_spid");
 	if (!espi->wq) {
 		dev_err(&pdev->dev, "unable to create workqueue\n");
+		error = -ENOMEM;
 		goto fail_free_dma;
 	}
 	INIT_WORK(&espi->msg_work, ep93xx_spi_work);
@@ -1132,7 +1133,6 @@ fail_put_clock:
 	clk_put(espi->clk);
 fail_release_master:
 	spi_master_put(master);
-	platform_set_drvdata(pdev, NULL);
 
 	return error;
 }
@@ -1167,7 +1167,6 @@ static int ep93xx_spi_remove(struct platform_device *pdev)
 
 	ep93xx_spi_release_dma(espi);
 	clk_put(espi->clk);
-	platform_set_drvdata(pdev, NULL);
 
 	spi_unregister_master(master);
 	return 0;
