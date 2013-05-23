@@ -65,6 +65,11 @@ void guruplug_dt_init(void);
 #else
 static inline void guruplug_dt_init(void) {};
 #endif
+#ifdef CONFIG_MACH_SHEEVAPLUG_DT
+void sheevaplug_dt_init(void);
+#else
+static inline void sheevaplug_dt_init(void) {};
+#endif
 #ifdef CONFIG_MACH_TS219_DT
 void qnap_dt_ts219_init(void);
 #else
@@ -117,6 +122,12 @@ static inline void iomega_ix2_200_init(void) {};
 void km_kirkwood_init(void);
 #else
 static inline void km_kirkwood_init(void) {};
+#endif
+
+#ifdef CONFIG_MACH_DB88F628X_BP_DT
+void db88f628x_init(void);
+#else
+static inline void db88f628x_init(void) {};
 #endif
 
 #ifdef CONFIG_MACH_MPLCEC4_DT
