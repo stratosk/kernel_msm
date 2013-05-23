@@ -398,9 +398,9 @@ static int check_syslog_permissions(int type, bool from_file)
 		 * a warning.
 		 */
 		if (capable(CAP_SYS_ADMIN)) {
-			printk_once(KERN_WARNING "%s (%d): "
-				 "Attempt to access syslog with CAP_SYS_ADMIN "
-				 "but no CAP_SYSLOG (deprecated).\n",
+			pr_warn_once("%s (%d): Attempt to access syslog with "
+				     "CAP_SYS_ADMIN but no CAP_SYSLOG "
+				     "(deprecated).\n",
 				 current->comm, task_pid_nr(current));
 			return 0;
 		}
