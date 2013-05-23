@@ -53,7 +53,7 @@ config MFD_CROS_EC
 	help
 	  If you say Y here you get support for the ChromeOS Embedded
 	  Controller (EC) providing keyboard, battery and power services.
-	  You also ned to enable the driver for the bus you are using. The
+	  You also need to enable the driver for the bus you are using. The
 	  protocol for talking to the EC is defined by the bus driver.
 
 config MFD_CROS_EC_I2C
@@ -419,7 +419,8 @@ config MFD_PM8XXX
 
 config MFD_PM8921_CORE
 	tristate "Qualcomm PM8921 PMIC chip"
-	depends on SSBI && BROKEN
+	depends on (ARCH_MSM || HEXAGON)
+	depends on BROKEN
 	select MFD_CORE
 	select MFD_PM8XXX
 	help
