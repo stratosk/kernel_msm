@@ -130,7 +130,6 @@ static int uhci_hcd_platform_remove(struct platform_device *pdev)
 	iounmap(hcd->regs);
 	release_mem_region(hcd->rsrc_start, hcd->rsrc_len);
 	usb_put_hcd(hcd);
-	platform_set_drvdata(pdev, NULL);
 
 	return 0;
 }
@@ -161,6 +160,6 @@ static struct platform_driver uhci_platform_driver = {
 	.driver = {
 		.name = "platform-uhci",
 		.owner = THIS_MODULE,
-		.of_match_table = of_match_ptr(platform_uhci_ids),
+		.of_match_table = platform_uhci_ids,
 	},
 };
