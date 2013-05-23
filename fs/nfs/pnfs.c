@@ -766,6 +766,7 @@ send_layoutget(struct pnfs_layout_hdr *lo,
 	lgp->args.inode = ino;
 	lgp->args.ctx = get_nfs_open_context(ctx);
 	lgp->gfp_flags = gfp_flags;
+	lgp->cred = lo->plh_lc_cred;
 
 	/* Synchronously retrieve layout information from server and
 	 * store in lseg.
@@ -860,6 +861,7 @@ _pnfs_return_layout(struct inode *ino)
 	lrp->args.inode = ino;
 	lrp->args.layout = lo;
 	lrp->clp = NFS_SERVER(ino)->nfs_client;
+	lrp->cred = lo->plh_lc_cred;
 
 	status = nfs4_proc_layoutreturn(lrp);
 out:
@@ -1050,7 +1052,7 @@ alloc_init_layout_hdr(struct inode *ino,
 	INIT_LIST_HEAD(&lo->plh_segs);
 	INIT_LIST_HEAD(&lo->plh_bulk_destroy);
 	lo->plh_inode = ino;
-	lo->plh_lc_cred = get_rpccred(ctx->state->owner->so_cred);
+	lo->plh_lc_cred = get_rpccred(ctx->cred);
 	return lo;
 }
 
