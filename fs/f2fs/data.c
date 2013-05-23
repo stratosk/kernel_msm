@@ -199,7 +199,7 @@ struct page *find_data_page(struct inode *inode, pgoff_t index, bool sync)
 	if (dn.data_blkaddr == NEW_ADDR)
 		return ERR_PTR(-EINVAL);
 
-	page = grab_cache_page(mapping, index);
+	page = grab_cache_page_write_begin(mapping, index, AOP_FLAG_NOFS);
 	if (!page)
 		return ERR_PTR(-ENOMEM);
 
@@ -233,18 +233,23 @@ struct page *get_lock_data_page(struct inode *inode, pgoff_t index)
 	struct page *page;
 	int err;
 
-	set_new_dnode(&dn, inode, NULL, NULL, 0);
-	err = get_dnode_of_data(&dn, index, LOOKUP_NODE);
-	if (err)
-		return ERR_PTR(err);
-	f2fs_put_dnode(&dn);
-
-	if (dn.data_blkaddr == NULL_ADDR)
-		return ERR_PTR(-ENOENT);
 repeat:
-	page = grab_cache_page(mapping, index);
+	page = grab_cache_page_write_begin(mapping, index, AOP_FLAG_NOFS);
 	if (!page)
 		return ERR_PTR(-ENOMEM);
+
+	set_new_dnode(&dn, inode, NULL, NULL, 0);
+	err = get_dnode_of_data(&dn, index, LOOKUP_NODE);
+	if (err) {
+		f2fs_put_page(page, 1);
+		return ERR_PTR(err);
+	}
+	f2fs_put_dnode(&dn);
+
+	if (dn.data_blkaddr == NULL_ADDR) {
+		f2fs_put_page(page, 1);
+		return ERR_PTR(-ENOENT);
+	}
 
 	if (PageUptodate(page))
 		return page;
@@ -274,9 +279,10 @@ repeat:
  *
  * Also, caller should grab and release a mutex by calling mutex_lock_op() and
  * mutex_unlock_op().
+ * Note that, npage is set only by make_empty_dir.
  */
-struct page *get_new_data_page(struct inode *inode, pgoff_t index,
-						bool new_i_size)
+struct page *get_new_data_page(struct inode *inode,
+		struct page *npage, pgoff_t index, bool new_i_size)
 {
 	struct f2fs_sb_info *sbi = F2FS_SB(inode->i_sb);
 	struct address_space *mapping = inode->i_mapping;
@@ -284,18 +290,20 @@ struct page *get_new_data_page(struct inode *inode, pgoff_t index,
 	struct dnode_of_data dn;
 	int err;
 
-	set_new_dnode(&dn, inode, NULL, NULL, 0);
+	set_new_dnode(&dn, inode, npage, npage, 0);
 	err = get_dnode_of_data(&dn, index, ALLOC_NODE);
 	if (err)
 		return ERR_PTR(err);
 
 	if (dn.data_blkaddr == NULL_ADDR) {
 		if (reserve_new_block(&dn)) {
-			f2fs_put_dnode(&dn);
+			if (!npage)
+				f2fs_put_dnode(&dn);
 			return ERR_PTR(-ENOSPC);
 		}
 	}
-	f2fs_put_dnode(&dn);
+	if (!npage)
+		f2fs_put_dnode(&dn);
 repeat:
 	page = grab_cache_page(mapping, index);
 	if (!page)
