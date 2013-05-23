@@ -168,6 +168,20 @@ static inline void cpu_maps_update_done(void)
 }
 
 #endif /* CONFIG_SMP */
+
+#ifdef CONFIG_PM_SLEEP_SMP
+extern void cpu_hotplug_enable(void);
+extern void cpu_hotplug_disable(void);
+#else
+static inline void cpu_hotplug_enable(void)
+{
+}
+
+static inline void cpu_hotplug_disable(void)
+{
+}
+#endif
+
 extern struct bus_type cpu_subsys;
 
 #ifdef CONFIG_HOTPLUG_CPU
