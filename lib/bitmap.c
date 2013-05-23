@@ -1114,13 +1114,15 @@ done:
  */
 int bitmap_find_free_region(unsigned long *bitmap, int bits, int order)
 {
-	int pos, end, nbit, i;	/* scans bitmap by regions of size order */
 	int nlongs = BITS_TO_LONGS(bits);
+	int i;
 
 	for (i = 0; i < nlongs; i++)
 		if (bitmap[i] != ~0UL) {
-			pos = i * BITS_PER_LONG;
-			nbit = min(bits, pos + BITS_PER_LONG);
+			int pos = i * BITS_PER_LONG;
+			int nbit = min(bits, pos + BITS_PER_LONG);
+			int end;
+
 			for (; (end = pos + (1 << order)) <= nbit; pos = end) {
 				if (!__reg_op(bitmap, pos, order,
 					REG_OP_ISFREE))
