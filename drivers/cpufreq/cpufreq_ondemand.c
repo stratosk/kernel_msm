@@ -36,8 +36,8 @@
 #define DEF_SAMPLING_DOWN_FACTOR		(1)
 #define DEF_GRAD_UP_THRESHOLD			(50)
 #define MAX_SAMPLING_DOWN_FACTOR		(100000)
-#define MICRO_FREQUENCY_DOWN_DIFFERENTIAL	(10)
-#define MICRO_FREQUENCY_UP_THRESHOLD		(85)
+#define MICRO_FREQUENCY_DOWN_DIFFERENTIAL	(3)
+#define MICRO_FREQUENCY_UP_THRESHOLD		(95)
 #define MICRO_FREQUENCY_MIN_SAMPLE_RATE		(10000)
 #define MIN_FREQUENCY_UP_THRESHOLD		(11)
 #define MAX_FREQUENCY_UP_THRESHOLD		(100)
@@ -714,8 +714,8 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 
 		cur_load = 100 * (wall_time - idle_time) / wall_time;
 
-		freq_avg = __cpufreq_driver_getavg(policy, j);
-		if (freq_avg <= 0)
+		/*freq_avg = __cpufreq_driver_getavg(policy, j);
+		if (freq_avg <= 0) */
 			freq_avg = policy->cur;
 
 		load_freq = cur_load * freq_avg;
@@ -742,29 +742,30 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	}
 
 	/* Check for frequency increase */
-	if (boost_freq ||
-	    max_load_freq > dbs_tuners_ins.up_threshold * policy->cur) {
+	if (boost_freq || cur_load > dbs_tuners_ins.up_threshold) {
 		/* If switching to max speed, apply sampling_down_factor */
 		if (policy->cur < policy->max)
 			this_dbs_info->rate_mult =
 				dbs_tuners_ins.sampling_down_factor;
 		dbs_freq_increase(policy, policy->max);
 		return;
-	}
+	} else
 
 	/* Check for frequency decrease */
 	/* if we cannot reduce the frequency anymore, break out early */
-	if (policy->cur == policy->min)
+	/*if (policy->cur == policy->min) {
 		return;
+	}*/
 
 	/*
 	 * The optimal frequency is the frequency that is the lowest that
 	 * can support the current CPU usage without triggering the up
 	 * policy. To be safe, we focus 10 points under the threshold.
 	 */
-	if (max_load_freq < dbs_tuners_ins.adj_up_threshold * policy->cur) {
+	/*if (max_load_freq < dbs_tuners_ins.adj_up_threshold * policy->cur) */{
 		unsigned int freq_next;
-		freq_next = max_load_freq / dbs_tuners_ins.adj_up_threshold;
+		freq_next = cur_load * policy->max / 100;
+		/*freq_next = max_load_freq / dbs_tuners_ins.adj_up_threshold;*/
 
 		/* No longer fully busy, reset rate_mult */
 		this_dbs_info->rate_mult = 1;
