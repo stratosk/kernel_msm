@@ -764,7 +764,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	 */
 	/*if (max_load_freq < dbs_tuners_ins.adj_up_threshold * policy->cur) */{
 		unsigned int freq_next;
-		freq_next = cur_load * policy->max / 100;
+		freq_next = cur_load * policy->cpuinfo.max_freq / 100;
 		/*freq_next = max_load_freq / dbs_tuners_ins.adj_up_threshold;*/
 
 		/* No longer fully busy, reset rate_mult */
