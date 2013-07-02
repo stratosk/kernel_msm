@@ -39,7 +39,8 @@
 #define MIN_FREQUENCY_UP_THRESHOLD		(11)
 #define MAX_FREQUENCY_UP_THRESHOLD		(100)
 #define TOUCH_LOAD				(65)
-#define TOUCH_DELAY				(2000)
+#define TOUCH_LOAD_THRESHOLD			(10)
+#define TOUCH_LOAD_DURATION				(1500)
 
 /*
  * The polling frequency of this governor depends on the capability of
@@ -78,8 +79,6 @@ struct cpufreq_governor cpufreq_gov_ondemand = {
 
 /* Sampling types */
 enum {DBS_NORMAL_SAMPLE, DBS_SUB_SAMPLE};
-
-struct timer_list input_timer;
 
 struct cpu_dbs_info_s {
 	cputime64_t prev_cpu_idle;
@@ -121,16 +120,21 @@ static struct dbs_tuners {
 	unsigned int sampling_down_factor;
 	int          powersave_bias;
 	unsigned int io_is_busy;
-	unsigned long touch_delay;
+	unsigned int touch_load_duration;
 	unsigned int touch_load;
+	unsigned int touch_load_threshold;
 } dbs_tuners_ins = {
 	.up_threshold = DEF_FREQUENCY_UP_THRESHOLD,
 	.sampling_down_factor = DEF_SAMPLING_DOWN_FACTOR,
 	.ignore_nice = 0,
 	.powersave_bias = 0,
-	.touch_delay = TOUCH_DELAY,
+	.touch_load_duration = TOUCH_LOAD_DURATION,
 	.touch_load = TOUCH_LOAD,
+	.touch_load_threshold = TOUCH_LOAD_THRESHOLD,
 };
+
+struct timer_list input_timer;
+static bool touch = false;
 
 static inline u64 get_cpu_idle_time_jiffy(unsigned int cpu, u64 *wall)
 {
@@ -280,6 +284,9 @@ show_one(io_is_busy, io_is_busy);
 show_one(up_threshold, up_threshold);
 show_one(sampling_down_factor, sampling_down_factor);
 show_one(ignore_nice_load, ignore_nice);
+show_one(touch_load, touch_load);
+show_one(touch_load_threshold, touch_load_threshold);
+show_one(touch_load_duration, touch_load_duration);
 
 static ssize_t show_powersave_bias
 (struct kobject *kobj, struct attribute *attr, char *buf)
@@ -552,12 +559,59 @@ skip_this_cpu_bypass:
 	return count;
 }
 
+static ssize_t store_touch_load(struct kobject *a, struct attribute *b,
+						const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+
+	if (ret != 1 || input > 100 ||
+			input < 1)
+		return -EINVAL;
+
+	dbs_tuners_ins.touch_load = input;
+	return count;
+}
+
+static ssize_t store_touch_load_threshold(struct kobject *a,
+			struct attribute *b, const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+
+	if (ret != 1 || input > 100 ||
+			input < 1)
+		return -EINVAL;
+
+	dbs_tuners_ins.touch_load_threshold = input;
+	return count;
+}
+
+static ssize_t store_touch_load_duration(struct kobject *a, struct attribute *b,
+						const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+
+	if (ret != 1)
+		return -EINVAL;
+
+	dbs_tuners_ins.touch_load_duration = input;
+	return count;
+}
+
 define_one_global_rw(sampling_rate);
 define_one_global_rw(io_is_busy);
 define_one_global_rw(up_threshold);
 define_one_global_rw(sampling_down_factor);
 define_one_global_rw(ignore_nice_load);
 define_one_global_rw(powersave_bias);
+define_one_global_rw(touch_load);
+define_one_global_rw(touch_load_threshold);
+define_one_global_rw(touch_load_duration);
 
 static struct attribute *dbs_attributes[] = {
 	&sampling_rate_min.attr,
@@ -567,6 +621,9 @@ static struct attribute *dbs_attributes[] = {
 	&ignore_nice_load.attr,
 	&powersave_bias.attr,
 	&io_is_busy.attr,
+	&touch_load.attr,
+	&touch_load_threshold.attr,
+	&touch_load_duration.attr,
 	NULL
 };
 
@@ -660,7 +717,9 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 			max_load = cur_load;
 	}
 
-	if (max_load < dbs_tuners_ins.touch_load && max_load > 15)
+	/* Boost only CPUs with load > touch_load_thershold */
+	if (touch && max_load < dbs_tuners_ins.touch_load &&
+	    max_load > dbs_tuners_ins.touch_load_threshold)
 		max_load = dbs_tuners_ins.touch_load;
 	
 	/* Check for frequency increase */
@@ -774,23 +833,23 @@ static int should_io_be_busy(void)
 	return 0;
 }
 
-static void input_timout(unsigned long timeout)
+static void input_timeout(unsigned long timeout)
 {
-	dbs_tuners_ins.touch_load = 0;
+	touch = false;
 }
 
 static void dbs_input_event(struct input_handle *handle, unsigned int type,
 		unsigned int code, int value)
 {
-	unsigned long delay = msecs_to_jiffies(dbs_tuners_ins.touch_delay);
+	unsigned long delay =
+			msecs_to_jiffies(dbs_tuners_ins.touch_load_duration);
 	
-	if (dbs_tuners_ins.touch_load == 0) {
-		dbs_tuners_ins.touch_load = TOUCH_LOAD;
-		input_timer.expires = jiffies + delay;
+	if (!touch) {
+		touch = true;
+		input_timer.expires = jiffies + delay; /* change this line */
 		add_timer(&input_timer);
-	} else {
+	} else
 		mod_timer(&input_timer, jiffies + delay);
-	}
 }
 
 static int dbs_input_connect(struct input_handler *handler,
@@ -977,7 +1036,7 @@ static int __init cpufreq_gov_dbs_init(void)
 	}
 
 	init_timer(&input_timer);
-	input_timer.function = input_timout;
+	input_timer.function = input_timeout;
 	
 	for_each_possible_cpu(i) {
 		struct cpu_dbs_info_s *this_dbs_info =
