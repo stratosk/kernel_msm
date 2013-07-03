@@ -39,8 +39,8 @@
 #define MIN_FREQUENCY_UP_THRESHOLD		(11)
 #define MAX_FREQUENCY_UP_THRESHOLD		(100)
 #define TOUCH_LOAD				(65)
-#define TOUCH_LOAD_THRESHOLD			(10)
-#define TOUCH_LOAD_DURATION				(1500)
+#define TOUCH_LOAD_THRESHOLD			(12)
+#define TOUCH_LOAD_DURATION			(1300)
 
 /*
  * The polling frequency of this governor depends on the capability of
@@ -134,7 +134,7 @@ static struct dbs_tuners {
 };
 
 struct timer_list input_timer;
-static bool touch = false;
+static bool touch;
 
 static inline u64 get_cpu_idle_time_jiffy(unsigned int cpu, u64 *wall)
 {
@@ -721,7 +721,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	if (touch && max_load < dbs_tuners_ins.touch_load &&
 	    max_load > dbs_tuners_ins.touch_load_threshold)
 		max_load = dbs_tuners_ins.touch_load;
-	
+
 	/* Check for frequency increase */
 	if (max_load > dbs_tuners_ins.up_threshold) {
 		/* If switching to max speed, apply sampling_down_factor */
@@ -843,7 +843,7 @@ static void dbs_input_event(struct input_handle *handle, unsigned int type,
 {
 	unsigned long delay =
 			msecs_to_jiffies(dbs_tuners_ins.touch_load_duration);
-	
+
 	if (!touch) {
 		touch = true;
 		input_timer.expires = jiffies + delay; /* change this line */
@@ -1035,9 +1035,10 @@ static int __init cpufreq_gov_dbs_init(void)
 			MIN_SAMPLING_RATE_RATIO * jiffies_to_usecs(10);
 	}
 
+	touch = false;
 	init_timer(&input_timer);
 	input_timer.function = input_timeout;
-	
+
 	for_each_possible_cpu(i) {
 		struct cpu_dbs_info_s *this_dbs_info =
 			&per_cpu(od_cpu_dbs_info, i);
