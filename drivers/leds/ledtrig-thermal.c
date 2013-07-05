@@ -78,16 +78,16 @@ static void check_temp(struct work_struct *work)
 		br = (LED_FULL * (temp - LOW_TEMP)) / (HIGH_TEMP - LOW_TEMP);
 
 	diff = abs(br - brightness);
-	if (diff > 120)
-		brightness = br;
-	else if (diff > 40)
-		br > brightness ? (brightness += 10) : (brightness -= 10);
-	else if (diff > 20)
-		br > brightness ? (brightness += 5) : (brightness -= 5);
-	else if (diff > 10)
-		br > brightness ? (brightness += 2) : (brightness -= 2);
-	else
+	if (diff < 10)
 		br > brightness ? ++brightness : --brightness;
+	else if (diff < 20)
+		br > brightness ? (brightness += 2) : (brightness -= 2);
+	else if (diff < 40)
+		br > brightness ? (brightness += 5) : (brightness -= 5);
+	else if (diff < 120)
+		br > brightness ? (brightness += 10) : (brightness -= 10);
+	else
+		brightness = br;
 
 	if (brightness < LED_OFF)
 		brightness = LED_OFF;
