@@ -10,11 +10,13 @@
  * published by the Free Software Foundation.
  *
  */
+#define DEBUG
 #define pr_fmt(fmt) "ledtrig_thermal: " fmt
 
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/slab.h>
 #include <linux/msm_tsens.h>
 #include <linux/workqueue.h>
 #include <linux/earlysuspend.h>
@@ -28,26 +30,88 @@
 #define DELAY_ON	(2 * HZ)
 
 static void check_temp(struct work_struct *work);
-static DECLARE_DELAYED_WORK(check_temp_work, check_temp);
-static unsigned delay;
-static int brightness;
-static int prev_brightness;
-static int active;
+
+struct thermal_trig_data {
+	unsigned delay;
+	int brightness;
+	int prev_brightness;
+	int active;
+	struct delayed_work work;
+	struct early_suspend suspend;
+};
+
+static struct led_trigger thermal_led_trigger;
+
+static void thermal_trig_early_suspend(struct early_suspend *h)
+{
+	struct thermal_trig_data *thermal_data =
+		container_of(h, struct thermal_trig_data, suspend);
+
+	if (!thermal_data->active)
+		return;
+
+	cancel_delayed_work(&thermal_data->work);
+	flush_scheduled_work();
+
+	if (thermal_data->brightness)
+		led_trigger_event(&thermal_led_trigger, LED_OFF);
+
+	pr_debug("%s: led_br: %u\n", __func__, thermal_data->brightness);
+}
+
+static void thermal_trig_late_resume(struct early_suspend *h)
+{
+	struct thermal_trig_data *thermal_data =
+		container_of(h, struct thermal_trig_data, suspend);
+
+	if (!thermal_data->active)
+		return;
+
+	thermal_data->delay = (thermal_data->brightness == LED_OFF) ?
+						DELAY_OFF : DELAY_ON;
+	schedule_delayed_work(&thermal_data->work, thermal_data->delay);
+
+	pr_debug("%s: led_br: %u\n", __func__, thermal_data->brightness);
+}
 
 static void thermal_trig_activate(struct led_classdev *led_cdev)
 {
-	delay = DELAY_OFF;
-	schedule_delayed_work(&check_temp_work, delay);
-	active = 1;
+	struct thermal_trig_data *thermal_data;
+
+	thermal_data = kzalloc(sizeof(*thermal_data), GFP_KERNEL);
+	if (!thermal_data)
+		return;
+
+	led_cdev->trigger_data = thermal_data;
+	thermal_data->delay = DELAY_OFF;
+	thermal_data->active = 1;
+	thermal_data->brightness = 0;
+
+	thermal_data->suspend.suspend = thermal_trig_early_suspend;
+	thermal_data->suspend.resume =  thermal_trig_late_resume;
+	thermal_data->suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN;
+	register_early_suspend(&thermal_data->suspend);
+
+	INIT_DELAYED_WORK(&thermal_data->work, check_temp);
+	schedule_delayed_work(&thermal_data->work, thermal_data->delay);
+
 	pr_info("%s: activated\n", __func__);
 }
 
 static void thermal_trig_deactivate(struct led_classdev *led_cdev)
 {
-	cancel_delayed_work(&check_temp_work);
-	flush_scheduled_work();
-	active = 0;
-	led_set_brightness(led_cdev, LED_OFF);
+	struct thermal_trig_data *thermal_data = led_cdev->trigger_data;
+
+	if (thermal_data) {
+		cancel_delayed_work(&thermal_data->work);
+		flush_scheduled_work();
+
+		thermal_data->active = 0;
+		led_set_brightness(led_cdev, LED_OFF);
+		unregister_early_suspend(&thermal_data->suspend);
+		kfree(thermal_data);
+	}
+
 	pr_info("%s: deactivated\n", __func__);
 }
 
@@ -59,11 +123,15 @@ static struct led_trigger thermal_led_trigger = {
 
 static void check_temp(struct work_struct *work)
 {
+	struct thermal_trig_data *thermal_data =
+		container_of(work, struct thermal_trig_data, work.work);
+
 	struct tsens_device tsens_dev;
 	unsigned long temp = 0;
-	int ret = 0;
 	int br = 0;
-	int diff = 0;
+	int ret;
+	int diff;
+	int upd = 0;
 
 	tsens_dev.sensor_num = SENSOR_ID;
 	ret = tsens_get_temp(&tsens_dev, &temp);
@@ -77,93 +145,50 @@ static void check_temp(struct work_struct *work)
 	if (temp > LOW_TEMP)
 		br = (LED_FULL * (temp - LOW_TEMP)) / (HIGH_TEMP - LOW_TEMP);
 
-	diff = abs(br - brightness);
+	diff = abs(br - thermal_data->brightness);
 	if (diff < 10)
-		br > brightness ? ++brightness : --brightness;
+		upd = 1;
 	else if (diff < 20)
-		br > brightness ? (brightness += 2) : (brightness -= 2);
+		upd = 2;
 	else if (diff < 40)
-		br > brightness ? (brightness += 5) : (brightness -= 5);
+		upd = 5;
 	else if (diff < 120)
-		br > brightness ? (brightness += 10) : (brightness -= 10);
+		upd = 10;
 	else
-		brightness = br;
+		upd = diff;
 
-	if (brightness < LED_OFF)
-		brightness = LED_OFF;
-	else if (brightness > LED_FULL)
-		brightness = LED_FULL;
+	if (br > thermal_data->brightness)
+		thermal_data->brightness += upd;
+	else
+		thermal_data->brightness -= upd;
+
+	if (thermal_data->brightness < LED_OFF)
+		thermal_data->brightness = LED_OFF;
+	else if (thermal_data->brightness > LED_FULL)
+		thermal_data->brightness = LED_FULL;
 
 	pr_debug("%s: temp: %lu, br: %u, led_br: %u\n", __func__,
-					temp, br, brightness);
+					temp, br, thermal_data->brightness);
 
-	if (brightness == prev_brightness)
+	if (thermal_data->brightness == thermal_data->prev_brightness)
 		goto reschedule;
 
-	prev_brightness = brightness;
-	led_trigger_event(&thermal_led_trigger, brightness);
+	thermal_data->prev_brightness = thermal_data->brightness;
+	led_trigger_event(&thermal_led_trigger, thermal_data->brightness);
 
 reschedule:
-	delay = (brightness == LED_OFF) ? DELAY_OFF : DELAY_ON;
-	schedule_delayed_work(&check_temp_work, delay);
+	thermal_data->delay = (thermal_data->brightness == LED_OFF) ?
+						DELAY_OFF : DELAY_ON;
+	schedule_delayed_work(&thermal_data->work, thermal_data->delay);
 }
-
-static void thermal_trig_early_suspend(struct early_suspend *h)
-{
-	if (!active)
-		return;
-
-	cancel_delayed_work(&check_temp_work);
-	flush_scheduled_work();
-
-	if (brightness)
-		led_trigger_event(&thermal_led_trigger, LED_OFF);
-
-	pr_debug("%s: led_br: %u\n", __func__, brightness);
-
-	return;
-}
-
-static void thermal_trig_late_resume(struct early_suspend *h)
-{
-	if (!active)
-		return;
-
-	delay = (brightness == LED_OFF) ? DELAY_OFF : DELAY_ON;
-	schedule_delayed_work(&check_temp_work, delay);
-
-	pr_debug("%s: led_br: %u\n", __func__, brightness);
-
-	return;
-}
-
-static struct early_suspend thermal_trig_suspend_data = {
-	.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN,
-	.suspend = thermal_trig_early_suspend,
-	.resume = thermal_trig_late_resume,
-};
 
 static int __init thermal_trig_init(void)
 {
-	int ret;
-	delay = DELAY_OFF;
-	brightness = 0;
-	prev_brightness = 0;
-	active = 0;
-
-	ret = led_trigger_register(&thermal_led_trigger);
-	if (!ret)
-		register_early_suspend(&thermal_trig_suspend_data);
-
-	return ret;
+	return led_trigger_register(&thermal_led_trigger);
 }
 
 static void __exit thermal_trig_exit(void)
 {
-	cancel_delayed_work(&check_temp_work);
-	flush_scheduled_work();
-
-	unregister_early_suspend(&thermal_trig_suspend_data);
 	led_trigger_unregister(&thermal_led_trigger);
 }
 
