@@ -10,7 +10,6 @@
  * published by the Free Software Foundation.
  *
  */
-#define DEBUG
 #define pr_fmt(fmt) "ledtrig_thermal: " fmt
 
 #include <linux/kernel.h>
