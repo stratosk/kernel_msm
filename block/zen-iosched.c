@@ -168,9 +168,7 @@ static void *zen_init_queue(struct request_queue *q)
 	zdata->fifo_expire[SYNC] = sync_expire;
 	zdata->fifo_expire[ASYNC] = async_expire;
 	zdata->fifo_batch = fifo_batch;
-
-	q->elevator->elevator_data = zdata;
-	return 0;
+	return zdata;
 }
 
 static void zen_exit_queue(struct elevator_queue *e)
@@ -259,7 +257,9 @@ static struct elevator_type iosched_zen = {
 
 static int __init zen_init(void)
 {
-	return elv_register(&iosched_zen);
+	elv_register(&iosched_zen);
+
+	return 0;
 }
 
 static void __exit zen_exit(void)
