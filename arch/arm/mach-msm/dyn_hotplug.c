@@ -32,6 +32,7 @@ struct dyn_hp_data {
 	unsigned int delay;
 	unsigned int min_online;
 	unsigned int down_timer;
+	unsigned int up_timer;
 	struct delayed_work work;
 } *hp_data;
 
@@ -42,17 +43,20 @@ static inline void up_one(void)
 		return;
 
 	cpu_up(num_online_cpus());
+
 	hp_data->down_timer = 0;
 }
 
 static inline void down_one(void)
 {
-	/* Min online CPUs, return*/
+	/* Min online CPUs, return */
 	if (num_online_cpus() == hp_data->min_online)
 		return;
 
 	cpu_down(num_online_cpus() - 1);
+
 	hp_data->down_timer = 0;
+	hp_data->up_timer = 0;
 }
 
 static __cpuinit void load_timer(struct work_struct *work)
@@ -64,6 +68,9 @@ static __cpuinit void load_timer(struct work_struct *work)
 	if (hp_data->down_timer < 10)
 		hp_data->down_timer++;
 
+	if (hp_data->up_timer < 2)
+		hp_data->up_timer++;
+
 	for_each_online_cpu(cpu) {
 		cpufreq_get_policy(&cpu_policy, cpu);
 		avg_load += cpu_policy.util;
@@ -73,7 +80,7 @@ static __cpuinit void load_timer(struct work_struct *work)
 	pr_debug("%s: avg_load: %u, num_online_cpus: %u, down_timer: %u",
 		__func__, avg_load, num_online_cpus(), hp_data->down_timer);
 
-	if (avg_load >= hp_data->up_threshold)
+	if (avg_load >= hp_data->up_threshold && hp_data->up_timer >= 2)
 		up_one();
 	else if (hp_data->down_timer >= 10)
 		down_one();
