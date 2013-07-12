@@ -101,6 +101,9 @@ static int __init dyn_hp_init(void)
 
 static void __exit dyn_hp_exit(void)
 {
+	cancel_delayed_work(&hp_data->work);
+	flush_scheduled_work();
+	kfree(hp_data);
 	pr_info("%s: deactivated\n", __func__);
 }
 
