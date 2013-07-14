@@ -72,7 +72,8 @@ static __cpuinit void load_timer(struct work_struct *work)
 		hp_data->up_timer++;
 
 	for_each_online_cpu(cpu) {
-		cpufreq_get_policy(&cpu_policy, cpu);
+		if (cpufreq_get_policy(&cpu_policy, cpu))
+			continue;
 		avg_load += cpu_policy.util;
 	}
 
