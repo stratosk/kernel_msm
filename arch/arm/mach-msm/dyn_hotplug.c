@@ -9,6 +9,7 @@
  *
  */
 
+#define DEBUG
 #define pr_fmt(fmt) "dyn_hotplug: " fmt
 
 #include <linux/kernel.h>
@@ -34,7 +35,26 @@ struct dyn_hp_data {
 	unsigned int down_timer;
 	unsigned int up_timer;
 	struct delayed_work work;
+	struct early_suspend suspend;
 } *hp_data;
+
+static void hp_early_suspend(struct early_suspend *h)
+{
+	pr_debug("%s: num_online_cpus: %u\n", __func__, num_online_cpus());
+	return;
+}
+
+static __cpuinit void hp_late_resume(struct early_suspend *h)
+{
+	unsigned int cpu;
+
+	pr_debug("%s: num_online_cpus: %u\n", __func__, num_online_cpus());
+	for_each_possible_cpu(cpu) {
+		cpu_up(cpu);
+	}
+
+	hp_data->down_timer = 0;
+}
 
 static inline void up_one(void)
 {
@@ -98,6 +118,11 @@ static int __init dyn_hp_init(void)
 	hp_data->delay = DELAY;
 	hp_data->up_threshold = UP_THRESHOLD;
 	hp_data->min_online = MIN_ONLINE;
+
+	hp_data->suspend.suspend = hp_early_suspend;
+	hp_data->suspend.resume =  hp_late_resume;
+	hp_data->suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN;
+	register_early_suspend(&hp_data->suspend);
 
 	INIT_DELAYED_WORK(&hp_data->work, load_timer);
 	schedule_delayed_work(&hp_data->work, hp_data->delay);
