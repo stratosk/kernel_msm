@@ -49,31 +49,37 @@ static __cpuinit void hp_late_resume(struct early_suspend *h)
 	unsigned int cpu;
 
 	pr_debug("%s: num_online_cpus: %u\n", __func__, num_online_cpus());
-	for_each_possible_cpu(cpu) {
-		cpu_up(cpu);
-	}
+	for_each_possible_cpu(cpu)
+		if (!cpu_online(cpu))
+			cpu_up(cpu);
 
 	hp_data->down_timer = 0;
 }
 
 static inline void up_one(void)
 {
+	unsigned int noc = num_online_cpus();
+
 	/* All CPUs are online, return */
-	if (num_online_cpus() == num_possible_cpus())
+	if (noc == num_possible_cpus())
 		return;
 
-	cpu_up(num_online_cpus());
+	if (!cpu_online(noc))
+		cpu_up(noc);
 
 	hp_data->down_timer = 0;
 }
 
 static inline void down_one(void)
 {
+	unsigned int noc = num_online_cpus();
+
 	/* Min online CPUs, return */
-	if (num_online_cpus() == hp_data->min_online)
+	if (noc == hp_data->min_online)
 		return;
 
-	cpu_down(num_online_cpus() - 1);
+	if (cpu_online(noc - 1))
+		cpu_down(noc - 1);
 
 	hp_data->down_timer = 0;
 	hp_data->up_timer = 0;
