@@ -100,7 +100,7 @@ static __cpuinit void load_timer(struct work_struct *work)
 		avg_load += cpufreq_quick_get_util(cpu);
 
 	avg_load /= num_online_cpus();
-	pr_debug("%s: avg_load: %u, num_online_cpus: %u, down_timer: %u",
+	pr_debug("%s: avg_load: %u, num_online_cpus: %u, down_timer: %u\n",
 		__func__, avg_load, num_online_cpus(), hp_data->down_timer);
 
 	if (avg_load >= hp_data->up_threshold && hp_data->up_timer >= 2)
