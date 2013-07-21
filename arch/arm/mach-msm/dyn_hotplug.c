@@ -124,6 +124,8 @@ static __cpuinit void load_timer(struct work_struct *work)
 static void dyn_hp_enable(void)
 {
 	schedule_delayed_work(&hp_data->work, hp_data->delay);
+	register_early_suspend(&hp_data->suspend);
+
 	hp_data->enabled = 1;
 	enabled = hp_data->enabled;
 }
@@ -132,6 +134,8 @@ static void dyn_hp_disable(void)
 {
 	cancel_delayed_work(&hp_data->work);
 	flush_scheduled_work();
+	unregister_early_suspend(&hp_data->suspend);
+
 	up_all();
 	hp_data->enabled = 0;
 	enabled = hp_data->enabled;
