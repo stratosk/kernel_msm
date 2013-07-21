@@ -225,6 +225,8 @@ static void __exit dyn_hp_exit(void)
 {
 	cancel_delayed_work(&hp_data->work);
 	flush_scheduled_work();
+	unregister_early_suspend(&hp_data->suspend);
+
 	kfree(hp_data);
 	pr_info("%s: deactivated\n", __func__);
 }
