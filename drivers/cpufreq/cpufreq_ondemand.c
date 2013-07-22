@@ -40,7 +40,7 @@
 #define MAX_FREQUENCY_UP_THRESHOLD		(100)
 #define TOUCH_LOAD				(75)
 #define TOUCH_LOAD_THRESHOLD			(10)
-#define TOUCH_LOAD_DURATION			(1300)
+#define TOUCH_LOAD_DURATION			(1100)
 
 /*
  * The polling frequency of this governor depends on the capability of
