@@ -78,6 +78,7 @@ static inline void up_one(void)
 		cpu_up(noc);
 
 	hp_data->down_timer = 0;
+	hp_data->up_timer = 0;
 }
 
 static inline void down_one(void)
