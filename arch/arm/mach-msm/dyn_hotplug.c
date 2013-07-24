@@ -133,22 +133,23 @@ static __cpuinit void load_timer(struct work_struct *work)
 
 static void dyn_hp_enable(void)
 {
+	if (hp_data->enabled)
+		return;
 	schedule_delayed_work(&hp_data->work, hp_data->delay);
 	register_early_suspend(&hp_data->suspend);
-
 	hp_data->enabled = 1;
-	enabled = hp_data->enabled;
 }
 
 static void dyn_hp_disable(void)
 {
+	if (!hp_data->enabled)
+		return;
 	cancel_delayed_work(&hp_data->work);
 	flush_scheduled_work();
 	unregister_early_suspend(&hp_data->suspend);
 
 	up_all();
 	hp_data->enabled = 0;
-	enabled = hp_data->enabled;
 }
 
 static __cpuinit int set_enabled(const char *val, const struct kernel_param *kp)
@@ -156,13 +157,12 @@ static __cpuinit int set_enabled(const char *val, const struct kernel_param *kp)
 	int ret = 0;
 
 	ret = param_set_bool(val, kp);
-	hp_data->enabled = enabled;
-	if (!hp_data->enabled)
+	if (!enabled)
 		dyn_hp_disable();
 	else
 		dyn_hp_enable();
 
-	pr_info("%s: enabled = %d\n", __func__, hp_data->enabled);
+	pr_info("%s: enabled = %d\n", __func__, enabled);
 	return ret;
 }
 
