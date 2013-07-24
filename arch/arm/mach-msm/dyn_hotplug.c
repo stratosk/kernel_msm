@@ -50,6 +50,8 @@ static inline void up_all(void)
 	for_each_possible_cpu(cpu)
 		if (!cpu_online(cpu))
 			cpu_up(cpu);
+
+	hp_data->down_timer = 0;
 }
 
 static void hp_early_suspend(struct early_suspend *h)
@@ -63,37 +65,44 @@ static __cpuinit void hp_late_resume(struct early_suspend *h)
 	pr_debug("%s: num_online_cpus: %u\n", __func__, num_online_cpus());
 
 	up_all();
-	hp_data->down_timer = 0;
 }
 
 static inline void up_one(void)
 {
-	unsigned int noc = num_online_cpus();
+	unsigned int cpu;
 
 	/* All CPUs are online, return */
-	if (noc == num_possible_cpus())
+	if (num_online_cpus() == num_possible_cpus())
 		return;
 
-	if (!cpu_online(noc))
-		cpu_up(noc);
+	for_each_possible_cpu(cpu)
+		if (cpu && !cpu_online(cpu)) {
+			cpu_up(cpu);
 
-	hp_data->down_timer = 0;
-	hp_data->up_timer = 0;
+			hp_data->down_timer = 0;
+			hp_data->up_timer = 0;
+
+			break;
+		}
 }
 
 static inline void down_one(void)
 {
-	unsigned int noc = num_online_cpus();
+	unsigned int cpu;
 
 	/* Min online CPUs, return */
-	if (noc == hp_data->min_online)
+	if (num_online_cpus() == hp_data->min_online)
 		return;
 
-	if (cpu_online(noc - 1))
-		cpu_down(noc - 1);
+	for_each_online_cpu(cpu)
+		if (cpu) {
+			cpu_down(cpu);
 
-	hp_data->down_timer = 0;
-	hp_data->up_timer = 0;
+			hp_data->down_timer = 0;
+			hp_data->up_timer = 0;
+
+			break;
+		}
 }
 
 static __cpuinit void load_timer(struct work_struct *work)
