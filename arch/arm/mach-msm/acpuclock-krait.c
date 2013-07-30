@@ -1163,10 +1163,28 @@ static void __init hw_init(void)
 static int acpu_table_show(struct seq_file *m, void *unused)
 {
 	const struct acpu_level *level;
-	char *pvs_names[] = { "Slow", "Nominal", "Fast", "Faster", "Unknown" };
+	char *pvs_name;
 	int under_uV;
 
-	seq_printf(m, "CPU PVS: %s\n", pvs_names[gpvs_bin]);
+	switch (gpvs_bin) {
+	case PVS_SLOW:
+		pvs_name = "Slow";
+		break;
+	case PVS_NOMINAL:
+		pvs_name = "Nominal";
+		break;
+	case PVS_FAST:
+		pvs_name = "Fast";
+		break;
+	case PVS_FASTER:
+		pvs_name = "Faster";
+		break;
+	default:
+		pvs_name = "Slow";
+		break;
+	}
+
+	seq_printf(m, "CPU PVS: %s\n", pvs_name);
 	seq_printf(m, "Boost uV: %u\n", drv.boost_uv);
 	seq_printf(m, "Boost uV enabled: %s\n", (enable_boost ? "Yes" : "No"));
 	seq_printf(m, "Higher KHz threshold: %lu\n", higher_khz_thres);
