@@ -45,7 +45,7 @@ make -j16 > /dev/null
 rm `echo $MODULES_DIR"/*"`
 find $KERNEL_DIR -name '*.ko' -exec cp -v {} $MODULES_DIR \;
 cd $INIT_DIR
-find . | cpio -o -H newc | gzip -9 > ../initrd.img
+find . \( ! -regex '.*/\..*' \) | cpio -o -H newc -R root:root | gzip -9 > ../initrd.img
 cd  $KERNEL_DIR
 
 #make -j16 zImage
