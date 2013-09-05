@@ -67,13 +67,13 @@ cd ../
 
 cp boot.img $CWM_DIR
 cd $CWM_DIR
-zip -r `echo $SEMA_VER`.zip *
-mv  `echo $SEMA_VER`.zip ../$OUTPUT_DIR
+zip -r `echo $SEMA_VER`_legacy.zip *
+mv  `echo $SEMA_VER`_legacy.zip ../$OUTPUT_DIR
 
 cd ../
 cd $CWM_ANY_DIR
-zip -r `echo $SEMA_VER`_any.zip *
-mv  `echo $SEMA_VER`_any.zip ../$OUTPUT_DIR
+zip -r `echo $SEMA_VER`.zip *
+mv  `echo $SEMA_VER`.zip ../$OUTPUT_DIR
 
 DATE_END=$(date +"%s")
 echo
