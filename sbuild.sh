@@ -47,7 +47,7 @@ make -j16 > /dev/null
 rm `echo $MODULES_DIR"/*"`
 rm `echo ../$CWM_ANY_DIR"system/lib/modules/*"`
 find $KERNEL_DIR -name '*.ko' -exec cp -v {} $MODULES_DIR \;
-find $KERNEL_DIR -name '*.ko' -exec cp -v {} ../$CWM_ANY_DIR"system/lib/modules/" \;
+find $KERNEL_DIR -name '*.ko' -exec cp -v {} ../$CWM_ANY_DIR"kernel/lib/modules/" \;
 cd $INIT_DIR
 find . \( ! -regex '.*/\..*' \) | cpio -o -H newc -R root:root | gzip -9 > ../initrd.img
 cd  $KERNEL_DIR
@@ -67,13 +67,13 @@ cd ../
 
 cp boot.img $CWM_DIR
 cd $CWM_DIR
-zip -r `echo $SEMA_VER`.zip *
-mv  `echo $SEMA_VER`.zip ../$OUTPUT_DIR
+zip -r `echo $SEMA_VER`_legacy.zip *
+mv  `echo $SEMA_VER`_legacy.zip ../$OUTPUT_DIR
 
 cd ../
 cd $CWM_ANY_DIR
-zip -r `echo $SEMA_VER`_any.zip *
-mv  `echo $SEMA_VER`_any.zip ../$OUTPUT_DIR
+zip -r `echo $SEMA_VER`.zip *
+mv  `echo $SEMA_VER`.zip ../$OUTPUT_DIR
 
 DATE_END=$(date +"%s")
 echo
