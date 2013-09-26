@@ -11,6 +11,7 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/cpu.h>
 #include <linux/init.h>
 #include <linux/workqueue.h>
 #include <linux/sched.h>
@@ -81,6 +82,53 @@ static struct cpu_stats *get_load_stats(void)
 
 EXPORT_SYMBOL_GPL(get_load_stats);
 
+struct load_thresh_tbl {
+	unsigned int up_threshold;
+	unsigned int down_threshold;
+};
+
+#define LOAD_SCALE(u, d)             \
+{                          	     \
+		.up_threshold = u,   \
+		.down_threshold = d, \
+}
+
+static struct load_thresh_tbl load[] = {
+	LOAD_SCALE(400, 0),
+	LOAD_SCALE(50, 0),
+	LOAD_SCALE(100, 40),
+	LOAD_SCALE(150, 80),
+	LOAD_SCALE(410, 140),
+};
+
+static void __ref online_cpu(void)
+{
+	int cpu;
+
+	for_each_cpu_not(cpu, cpu_online_mask) {
+		if (cpu == 0)
+			continue;
+		cpu_up(cpu);
+		break;
+	}
+}
+
+EXPORT_SYMBOL_GPL(online_up);
+
+static void offline_cpu(void)
+{
+	int cpu;
+
+	for_each_online_cpu(cpu) {
+		if (cpu == 0)
+			continue;
+		cpu_down(cpu);
+		break;
+	}
+}
+
+EXPORT_SYMBOL_GPL(offline_cpu);
+
 static void msm_hotplug_fn(struct work_struct *work)
 {
 	unsigned int cur_load, online_cpus;
@@ -91,6 +139,11 @@ static void msm_hotplug_fn(struct work_struct *work)
 
 	dprintk("%s: cur_load: %3u online_cpus: %u\n", MSM_HOTPLUG, cur_load,
 		online_cpus);
+
+	if (cur_load >= load[online_cpus].up_threshold)
+		online_cpu();
+	else if (cur_load < load[online_cpus].down_threshold)
+		offline_cpu();
 
 	queue_delayed_work_on(0, hotplug_wq, &hotplug_work, HZ);
 }
