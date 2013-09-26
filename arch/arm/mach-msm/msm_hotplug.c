@@ -24,6 +24,8 @@
 #include <mach/cpufreq.h>
 
 #define MSM_HOTPLUG		"msm-hotplug"
+#define DEFAULT_UPDATE_RATE	HZ / 10
+#define START_DELAY		HZ * 20
 #define HISTORY_SIZE		10
 #define DEFAULT_SUSPEND_FREQ	702000
 
@@ -41,6 +43,7 @@ static struct workqueue_struct *hotplug_wq;
 static struct delayed_work hotplug_work;
 
 struct cpu_stats {
+	unsigned int update_rate;
 	unsigned int load_hist[HISTORY_SIZE];
 	unsigned int hist_cnt;
 	unsigned int total_cpus;
@@ -129,9 +132,10 @@ static void offline_cpu(void)
 
 EXPORT_SYMBOL_GPL(offline_cpu);
 
-static int reschedule_hotplug_fn(void)
+static int reschedule_hotplug_fn(struct cpu_stats *st)
 {
-	return queue_delayed_work_on(0, hotplug_wq, &hotplug_work, HZ);
+	return queue_delayed_work_on(0, hotplug_wq, &hotplug_work,
+				     st->update_rate);
 }
 
 EXPORT_SYMBOL_GPL(reschedule_hotplug_fn);
@@ -149,7 +153,7 @@ static void msm_hotplug_fn(struct work_struct *work)
 
 	if (online_cpus == 1 && mako_boosted) {
 		online_cpu();
-		reschedule_hotplug_fn();
+		reschedule_hotplug_fn(st);
 		return;
 	}
 
@@ -158,7 +162,7 @@ static void msm_hotplug_fn(struct work_struct *work)
 	else if (cur_load < load[online_cpus].down_threshold)
 		offline_cpu();
 
-	reschedule_hotplug_fn();
+	reschedule_hotplug_fn(st);
 }
 
 EXPORT_SYMBOL_GPL(msm_hotplug_fn);
@@ -184,6 +188,7 @@ EXPORT_SYMBOL_GPL(msm_hotplug_early_suspend);
 static void msm_hotplug_late_resume(struct early_suspend *handler)
 {
 	unsigned int cpu = 0;
+	struct cpu_stats *st = &stats;
 	struct cpufreq_policy *policy = cpufreq_cpu_get(cpu);
 
 	if (!policy)
@@ -195,7 +200,7 @@ static void msm_hotplug_late_resume(struct early_suspend *handler)
 	pr_info("mako_hotplug: Late resume - restore max frequency: %dMHz\n",
 		policy->max / 1000);
 
-	queue_delayed_work_on(0, hotplug_wq, &hotplug_work, HZ);
+	reschedule_hotplug_fn(st);
 }
 
 EXPORT_SYMBOL_GPL(msm_hotplug_late_resume);
@@ -220,9 +225,10 @@ static int __init msm_hotplug_init(void)
 	}
 
 	INIT_DELAYED_WORK(&hotplug_work, msm_hotplug_fn);
-	queue_delayed_work_on(0, hotplug_wq, &hotplug_work, HZ * 20);
+	queue_delayed_work_on(0, hotplug_wq, &hotplug_work, START_DELAY);
 
 	st->total_cpus = NR_CPUS;
+	st->update_rate = DEFAULT_UPDATE_RATE;
 	suspend_freq = DEFAULT_SUSPEND_FREQ;
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
