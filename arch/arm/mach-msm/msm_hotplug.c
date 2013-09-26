@@ -129,6 +129,13 @@ static void offline_cpu(void)
 
 EXPORT_SYMBOL_GPL(offline_cpu);
 
+static int reschedule_hotplug_fn(void)
+{
+	return queue_delayed_work_on(0, hotplug_wq, &hotplug_work, HZ);
+}
+
+EXPORT_SYMBOL_GPL(reschedule_hotplug_fn);
+
 static void msm_hotplug_fn(struct work_struct *work)
 {
 	unsigned int cur_load, online_cpus;
@@ -140,12 +147,18 @@ static void msm_hotplug_fn(struct work_struct *work)
 	dprintk("%s: cur_load: %3u online_cpus: %u\n", MSM_HOTPLUG, cur_load,
 		online_cpus);
 
+	if (online_cpus == 1 && mako_boosted) {
+		online_cpu();
+		reschedule_hotplug_fn();
+		return;
+	}
+
 	if (cur_load >= load[online_cpus].up_threshold)
 		online_cpu();
 	else if (cur_load < load[online_cpus].down_threshold)
 		offline_cpu();
 
-	queue_delayed_work_on(0, hotplug_wq, &hotplug_work, HZ);
+	reschedule_hotplug_fn();
 }
 
 EXPORT_SYMBOL_GPL(msm_hotplug_fn);
