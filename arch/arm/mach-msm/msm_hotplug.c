@@ -22,6 +22,15 @@
 #define MSM_HOTPLUG		"msm-hotplug"
 #define HISTORY_SIZE		10
 
+static unsigned int debug = 0;
+module_param_named(debug_mask, debug, uint, 0644);
+
+#define dprintk(msg...)		\
+do { 				\
+	if (debug)		\
+		pr_info(msg);	\
+} while (0)
+
 static struct workqueue_struct *hotplug_wq;
 static struct delayed_work hotplug_work;
 
@@ -71,7 +80,7 @@ static void msm_hotplug_fn(struct work_struct *work)
 	cur_load = st->current_load;
 	online_cpus = st->online_cpus;
 
-	pr_info("%s: cur_load: %u online_cpus %u\n", MSM_HOTPLUG, cur_load,
+	dprintk("%s: cur_load: %3u online_cpus: %u\n", MSM_HOTPLUG, cur_load,
 		online_cpus);
 
 	queue_delayed_work_on(0, hotplug_wq, &hotplug_work, HZ);
