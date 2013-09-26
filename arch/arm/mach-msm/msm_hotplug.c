@@ -15,6 +15,7 @@
 #include <linux/workqueue.h>
 #include <linux/sched.h>
 #include <linux/platform_device.h>
+#include <linux/cpufreq.h>
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
@@ -23,7 +24,9 @@
 
 #define MSM_HOTPLUG		"msm-hotplug"
 #define HISTORY_SIZE		10
+#define DEFAULT_SUSPEND_FREQ	702000
 
+static unsigned int suspend_freq;
 static unsigned int debug = 0;
 module_param_named(debug_mask, debug, uint, 0644);
 
@@ -92,14 +95,36 @@ EXPORT_SYMBOL_GPL(msm_hotplug_fn);
 
 static void msm_hotplug_early_suspend(struct early_suspend *handler)
 {
+	unsigned int cpu = 0;
+	struct cpufreq_policy *policy = cpufreq_cpu_get(cpu);
+
+	if (!policy)
+		return;
+
 	flush_workqueue(hotplug_wq);
 	cancel_delayed_work_sync(&hotplug_work);
+
+	msm_cpufreq_set_freq_limits(0, policy->min, suspend_freq);
+	pr_info("%s: Early suspend - max freq: %dMHz\n", "msm_hotplug",
+		suspend_freq / 1000);
 }
 
 EXPORT_SYMBOL_GPL(msm_hotplug_early_suspend);
 
 static void msm_hotplug_late_resume(struct early_suspend *handler)
 {
+	unsigned int cpu = 0;
+	struct cpufreq_policy *policy = cpufreq_cpu_get(cpu);
+
+	if (!policy)
+		return;
+
+	for_each_possible_cpu(cpu)
+	    msm_cpufreq_set_freq_limits(cpu, policy->min, policy->max);
+
+	pr_info("mako_hotplug: Late resume - restore max frequency: %dMHz\n",
+		policy->max / 1000);
+
 	queue_delayed_work_on(0, hotplug_wq, &hotplug_work, HZ);
 }
 
@@ -128,6 +153,7 @@ static int __init msm_hotplug_init(void)
 	queue_delayed_work_on(0, hotplug_wq, &hotplug_work, HZ * 20);
 
 	st->total_cpus = NR_CPUS;
+	suspend_freq = DEFAULT_SUSPEND_FREQ;
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	register_early_suspend(&msm_hotplug_suspend);
