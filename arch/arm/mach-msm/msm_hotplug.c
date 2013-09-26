@@ -12,6 +12,8 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/workqueue.h>
+#include <linux/sched.h>
 #include <linux/platform_device.h>
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
@@ -90,14 +92,15 @@ EXPORT_SYMBOL_GPL(msm_hotplug_fn);
 
 static void msm_hotplug_early_suspend(struct early_suspend *handler)
 {
-	return;
+	flush_workqueue(hotplug_wq);
+	cancel_delayed_work_sync(&hotplug_work);
 }
 
 EXPORT_SYMBOL_GPL(msm_hotplug_early_suspend);
 
 static void msm_hotplug_late_resume(struct early_suspend *handler)
 {
-	return;
+	queue_delayed_work_on(0, hotplug_wq, &hotplug_work, HZ);
 }
 
 EXPORT_SYMBOL_GPL(msm_hotplug_late_resume);
