@@ -16,6 +16,7 @@
 #include <linux/workqueue.h>
 #include <linux/sched.h>
 #include <linux/platform_device.h>
+#include <linux/timer.h>
 #include <linux/cpufreq.h>
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
@@ -27,10 +28,13 @@
 #define DEFAULT_UPDATE_RATE	HZ / 10
 #define START_DELAY		HZ * 20
 #define HISTORY_SIZE		10
+#define DEFAULT_DOWN_LOCK_DUR	2000
 #define DEFAULT_SUSPEND_FREQ	702000
 
 static unsigned int suspend_freq;
-static unsigned int debug = 0;
+static unsigned int down_lock;
+static unsigned int down_lock_dur;
+static unsigned int debug;
 module_param_named(debug_mask, debug, uint, 0644);
 
 #define dprintk(msg...)		\
@@ -41,6 +45,7 @@ do { 				\
 
 static struct workqueue_struct *hotplug_wq;
 static struct delayed_work hotplug_work;
+static struct timer_list lock_timer;
 
 struct cpu_stats {
 	unsigned int update_rate;
@@ -104,6 +109,21 @@ static struct load_thresh_tbl load[] = {
 	LOAD_SCALE(410, 140),
 };
 
+static void apply_down_lock(unsigned int duration)
+{
+	down_lock = 1;
+	mod_timer(&lock_timer, jiffies + msecs_to_jiffies(duration));
+}
+
+EXPORT_SYMBOL_GPL(apply_down_lock);
+
+static void handle_lock_timer(unsigned long data)
+{
+	down_lock = 0;
+}
+
+EXPORT_SYMBOL_GPL(handle_lock_timer);
+
 static void __ref online_cpu(void)
 {
 	int cpu;
@@ -116,11 +136,14 @@ static void __ref online_cpu(void)
 	}
 }
 
-EXPORT_SYMBOL_GPL(online_up);
+EXPORT_SYMBOL_GPL(online_cpu);
 
 static void offline_cpu(void)
 {
 	int cpu;
+
+	if (down_lock)
+		return;
 
 	for_each_online_cpu(cpu) {
 		if (cpu == 0)
@@ -153,14 +176,17 @@ static void msm_hotplug_fn(struct work_struct *work)
 
 	if (online_cpus == 1 && mako_boosted) {
 		online_cpu();
+		apply_down_lock(down_lock_dur);
 		reschedule_hotplug_fn(st);
 		return;
 	}
 
-	if (cur_load >= load[online_cpus].up_threshold)
+	if (cur_load >= load[online_cpus].up_threshold) {
 		online_cpu();
-	else if (cur_load < load[online_cpus].down_threshold)
+		apply_down_lock(down_lock_dur);
+	} else if (cur_load < load[online_cpus].down_threshold) {
 		offline_cpu();
+	}
 
 	reschedule_hotplug_fn(st);
 }
@@ -229,8 +255,12 @@ static int __init msm_hotplug_init(void)
 
 	st->total_cpus = NR_CPUS;
 	st->update_rate = DEFAULT_UPDATE_RATE;
+	down_lock = 0;
+	down_lock_dur = DEFAULT_DOWN_LOCK_DUR;
+	debug = 0;
 	suspend_freq = DEFAULT_SUSPEND_FREQ;
 
+	setup_timer(&lock_timer, handle_lock_timer, 0);
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	register_early_suspend(&msm_hotplug_suspend);
 #endif
@@ -261,9 +291,17 @@ static int __init msm_hotplug_device_init(void)
 	return ret;
 }
 
+EXPORT_SYMBOL_GPL(msm_hotplug_exit);
+
+static void __exit msm_hotplug_exit(void)
+{
+	del_timer(&lock_timer);
+}
+
 EXPORT_SYMBOL_GPL(msm_hotplug_device_init);
 
 late_initcall(msm_hotplug_device_init);
+module_exit(msm_hotplug_exit);
 
 MODULE_AUTHOR("Fluxi <linflux@arcor.de>");
 MODULE_DESCRIPTION("MSM Hotplug Driver");
