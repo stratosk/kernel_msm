@@ -17,6 +17,7 @@
 #include <linux/sched.h>
 #include <linux/platform_device.h>
 #include <linux/timer.h>
+#include <linux/slab.h>
 #include <linux/cpufreq.h>
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
@@ -27,7 +28,7 @@
 #define MSM_HOTPLUG		"msm-hotplug"
 #define DEFAULT_UPDATE_RATE	HZ / 10
 #define START_DELAY		HZ * 20
-#define HISTORY_SIZE		10
+#define DEFAULT_HISTORY_SIZE	10
 #define DEFAULT_DOWN_LOCK_DUR	2000
 #define DEFAULT_SUSPEND_FREQ	702000
 
@@ -40,30 +41,35 @@ do { 				\
 		pr_info(msg);	\
 } while (0)
 
-struct cpu_hotplug {
+static struct cpu_hotplug {
 	unsigned int suspend_freq;
-	unsigned int down_lock;
+	atomic_t down_lock;
 	unsigned int down_lock_dur;
 	struct work_struct up_work;
 	struct work_struct down_work;
 	struct timer_list lock_timer;
+} hotplug = {
+	.suspend_freq = DEFAULT_SUSPEND_FREQ,
+	.down_lock = ATOMIC_INIT(0),
+	.down_lock_dur = DEFAULT_DOWN_LOCK_DUR
 };
-
-static struct cpu_hotplug hotplug;
 
 static struct workqueue_struct *hotplug_wq;
 static struct delayed_work hotplug_work;
 
-struct cpu_stats {
+static struct cpu_stats {
 	unsigned int update_rate;
-	unsigned int load_hist[HISTORY_SIZE];
+	unsigned int *load_hist;
+	unsigned int hist_size;
 	unsigned int hist_cnt;
 	unsigned int total_cpus;
 	unsigned int online_cpus;
 	unsigned int current_load;
+} stats = {
+	.update_rate = DEFAULT_UPDATE_RATE,
+	.hist_size = DEFAULT_HISTORY_SIZE,
+	.total_cpus = NR_CPUS,
 };
-
-static struct cpu_stats stats;
 
 static DEFINE_SPINLOCK(stats_lock);
 extern unsigned int report_load_at_max_freq(void);
@@ -78,18 +84,18 @@ static struct cpu_stats *get_load_stats(void)
 	spin_lock_irqsave(&stats_lock, flags);
 	st->load_hist[st->hist_cnt] = report_load_at_max_freq();
 
-	for (i = 0, j = st->hist_cnt; i < HISTORY_SIZE; i++, j--) {
+	for (i = 0, j = st->hist_cnt; i < st->hist_size; i++, j--) {
 		load += st->load_hist[j];
 
 		if (j == 0)
-			j = HISTORY_SIZE;
+			j = st->hist_size;
 	}
 
-	if (++st->hist_cnt == HISTORY_SIZE)
+	if (++st->hist_cnt == st->hist_size)
 		st->hist_cnt = 0;
 
 	st->online_cpus = num_online_cpus();
-	st->current_load = load / HISTORY_SIZE;
+	st->current_load = load / st->hist_size;
 	spin_unlock_irqrestore(&stats_lock, flags);
 
 	return st;
@@ -118,7 +124,7 @@ static struct load_thresh_tbl load[] = {
 
 static void apply_down_lock(struct cpu_hotplug *hp)
 {
-	hp->down_lock = 1;
+	atomic_set(&hp->down_lock, 1);
 	mod_timer(&hp->lock_timer,
 		  jiffies + msecs_to_jiffies(hp->down_lock_dur));
 }
@@ -129,7 +135,7 @@ static void handle_lock_timer(unsigned long data)
 {
 	struct cpu_hotplug *hp = &hotplug;
 
-	hp->down_lock = 0;
+	atomic_set(&hp->down_lock, 0);
 }
 
 EXPORT_SYMBOL_GPL(handle_lock_timer);
@@ -151,9 +157,11 @@ EXPORT_SYMBOL_GPL(cpu_up_work);
 static void cpu_down_work(struct work_struct *work)
 {
 	int cpu;
+	int lock;
 	struct cpu_hotplug *hp = &hotplug;
 
-	if (hp->down_lock)
+	lock = atomic_read(&hp->down_lock);
+	if (lock)
 		return;
 
 	for_each_online_cpu(cpu) {
@@ -283,11 +291,9 @@ static int __init msm_hotplug_init(void)
 
 	queue_delayed_work_on(0, hotplug_wq, &hotplug_work, START_DELAY);
 
-	st->total_cpus = NR_CPUS;
-	st->update_rate = DEFAULT_UPDATE_RATE;
-	hp->down_lock = 0;
-	hp->down_lock_dur = DEFAULT_DOWN_LOCK_DUR;
-	hp->suspend_freq = DEFAULT_SUSPEND_FREQ;
+	st->load_hist = kmalloc(sizeof(st->hist_size), GFP_KERNEL);
+	if (!st->load_hist)
+		return -ENOMEM;
 
 	setup_timer(&hp->lock_timer, handle_lock_timer, 0);
 #ifdef CONFIG_HAS_EARLYSUSPEND
@@ -325,8 +331,10 @@ EXPORT_SYMBOL_GPL(msm_hotplug_exit);
 static void __exit msm_hotplug_exit(void)
 {
 	struct cpu_hotplug *hp = &hotplug;
+	struct cpu_stats *st = &stats;
 
 	del_timer(&hp->lock_timer);
+	kfree(st->load_hist);
 }
 
 EXPORT_SYMBOL_GPL(msm_hotplug_device_init);
