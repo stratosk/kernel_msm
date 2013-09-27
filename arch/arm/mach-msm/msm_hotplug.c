@@ -31,10 +31,7 @@
 #define DEFAULT_DOWN_LOCK_DUR	2000
 #define DEFAULT_SUSPEND_FREQ	702000
 
-static unsigned int suspend_freq;
-static unsigned int down_lock;
-static unsigned int down_lock_dur;
-static unsigned int debug;
+static unsigned int debug = 0;
 module_param_named(debug_mask, debug, uint, 0644);
 
 #define dprintk(msg...)		\
@@ -43,9 +40,19 @@ do { 				\
 		pr_info(msg);	\
 } while (0)
 
+struct cpu_hotplug {
+	unsigned int suspend_freq;
+	unsigned int down_lock;
+	unsigned int down_lock_dur;
+	struct work_struct up_work;
+	struct work_struct down_work;
+	struct timer_list lock_timer;
+};
+
+static struct cpu_hotplug hotplug;
+
 static struct workqueue_struct *hotplug_wq;
 static struct delayed_work hotplug_work;
-static struct timer_list lock_timer;
 
 struct cpu_stats {
 	unsigned int update_rate;
@@ -109,22 +116,25 @@ static struct load_thresh_tbl load[] = {
 	LOAD_SCALE(410, 140),
 };
 
-static void apply_down_lock(unsigned int duration)
+static void apply_down_lock(struct cpu_hotplug *hp)
 {
-	down_lock = 1;
-	mod_timer(&lock_timer, jiffies + msecs_to_jiffies(duration));
+	hp->down_lock = 1;
+	mod_timer(&hp->lock_timer,
+		  jiffies + msecs_to_jiffies(hp->down_lock_dur));
 }
 
 EXPORT_SYMBOL_GPL(apply_down_lock);
 
 static void handle_lock_timer(unsigned long data)
 {
-	down_lock = 0;
+	struct cpu_hotplug *hp = &hotplug;
+
+	hp->down_lock = 0;
 }
 
 EXPORT_SYMBOL_GPL(handle_lock_timer);
 
-static void __ref online_cpu(void)
+static void __ref cpu_up_work(struct work_struct *work)
 {
 	int cpu;
 
@@ -136,13 +146,14 @@ static void __ref online_cpu(void)
 	}
 }
 
-EXPORT_SYMBOL_GPL(online_cpu);
+EXPORT_SYMBOL_GPL(cpu_up_work);
 
-static void offline_cpu(void)
+static void cpu_down_work(struct work_struct *work)
 {
 	int cpu;
+	struct cpu_hotplug *hp = &hotplug;
 
-	if (down_lock)
+	if (hp->down_lock)
 		return;
 
 	for_each_online_cpu(cpu) {
@@ -151,6 +162,21 @@ static void offline_cpu(void)
 		cpu_down(cpu);
 		break;
 	}
+}
+
+EXPORT_SYMBOL_GPL(cpu_down_work);
+
+static void online_cpu(struct cpu_hotplug *hp)
+{
+	queue_work_on(0, hotplug_wq, &hp->up_work);
+	apply_down_lock(hp);
+}
+
+EXPORT_SYMBOL_GPL(online_cpu);
+
+static void offline_cpu(struct cpu_hotplug *hp)
+{
+	queue_work_on(0, hotplug_wq, &hp->down_work);
 }
 
 EXPORT_SYMBOL_GPL(offline_cpu);
@@ -167,6 +193,7 @@ static void msm_hotplug_fn(struct work_struct *work)
 {
 	unsigned int cur_load, online_cpus;
 	struct cpu_stats *st = get_load_stats();
+	struct cpu_hotplug *hp = &hotplug;
 
 	cur_load = st->current_load;
 	online_cpus = st->online_cpus;
@@ -175,17 +202,15 @@ static void msm_hotplug_fn(struct work_struct *work)
 		online_cpus);
 
 	if (online_cpus == 1 && mako_boosted) {
-		online_cpu();
-		apply_down_lock(down_lock_dur);
+		online_cpu(hp);
 		reschedule_hotplug_fn(st);
 		return;
 	}
 
 	if (cur_load >= load[online_cpus].up_threshold) {
-		online_cpu();
-		apply_down_lock(down_lock_dur);
+		online_cpu(hp);
 	} else if (cur_load < load[online_cpus].down_threshold) {
-		offline_cpu();
+		offline_cpu(hp);
 	}
 
 	reschedule_hotplug_fn(st);
@@ -196,6 +221,7 @@ EXPORT_SYMBOL_GPL(msm_hotplug_fn);
 static void msm_hotplug_early_suspend(struct early_suspend *handler)
 {
 	unsigned int cpu = 0;
+	struct cpu_hotplug *hp = &hotplug;
 	struct cpufreq_policy *policy = cpufreq_cpu_get(cpu);
 
 	if (!policy)
@@ -204,9 +230,9 @@ static void msm_hotplug_early_suspend(struct early_suspend *handler)
 	flush_workqueue(hotplug_wq);
 	cancel_delayed_work_sync(&hotplug_work);
 
-	msm_cpufreq_set_freq_limits(0, policy->min, suspend_freq);
-	pr_info("%s: Early suspend - max freq: %dMHz\n", "msm_hotplug",
-		suspend_freq / 1000);
+	msm_cpufreq_set_freq_limits(0, policy->min, hp->suspend_freq);
+	pr_info("%s: Early suspend - max freq: %dMHz\n", MSM_HOTPLUG,
+		hp->suspend_freq / 1000);
 }
 
 EXPORT_SYMBOL_GPL(msm_hotplug_early_suspend);
@@ -223,8 +249,8 @@ static void msm_hotplug_late_resume(struct early_suspend *handler)
 	for_each_possible_cpu(cpu)
 	    msm_cpufreq_set_freq_limits(cpu, policy->min, policy->max);
 
-	pr_info("mako_hotplug: Late resume - restore max frequency: %dMHz\n",
-		policy->max / 1000);
+	pr_info("%s: Late resume - restore max frequency: %dMHz\n",
+		MSM_HOTPLUG, policy->max / 1000);
 
 	reschedule_hotplug_fn(st);
 }
@@ -243,6 +269,7 @@ static int __init msm_hotplug_init(void)
 {
 	int ret = 0;
 	struct cpu_stats *st = &stats;
+	struct cpu_hotplug *hp = &hotplug;
 
 	hotplug_wq = alloc_workqueue("msm_hotplug_wq", 0, 0);
 	if (!hotplug_wq) {
@@ -251,16 +278,18 @@ static int __init msm_hotplug_init(void)
 	}
 
 	INIT_DELAYED_WORK(&hotplug_work, msm_hotplug_fn);
+	INIT_WORK(&hp->up_work, cpu_up_work);
+	INIT_WORK(&hp->down_work, cpu_down_work);
+
 	queue_delayed_work_on(0, hotplug_wq, &hotplug_work, START_DELAY);
 
 	st->total_cpus = NR_CPUS;
 	st->update_rate = DEFAULT_UPDATE_RATE;
-	down_lock = 0;
-	down_lock_dur = DEFAULT_DOWN_LOCK_DUR;
-	debug = 0;
-	suspend_freq = DEFAULT_SUSPEND_FREQ;
+	hp->down_lock = 0;
+	hp->down_lock_dur = DEFAULT_DOWN_LOCK_DUR;
+	hp->suspend_freq = DEFAULT_SUSPEND_FREQ;
 
-	setup_timer(&lock_timer, handle_lock_timer, 0);
+	setup_timer(&hp->lock_timer, handle_lock_timer, 0);
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	register_early_suspend(&msm_hotplug_suspend);
 #endif
@@ -295,7 +324,9 @@ EXPORT_SYMBOL_GPL(msm_hotplug_exit);
 
 static void __exit msm_hotplug_exit(void)
 {
-	del_timer(&lock_timer);
+	struct cpu_hotplug *hp = &hotplug;
+
+	del_timer(&hp->lock_timer);
 }
 
 EXPORT_SYMBOL_GPL(msm_hotplug_device_init);
