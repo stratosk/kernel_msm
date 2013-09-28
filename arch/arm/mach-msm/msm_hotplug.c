@@ -16,6 +16,7 @@
 #include <linux/workqueue.h>
 #include <linux/sched.h>
 #include <linux/platform_device.h>
+#include <linux/device.h>
 #include <linux/timer.h>
 #include <linux/slab.h>
 #include <linux/cpufreq.h>
@@ -25,9 +26,10 @@
 
 #include <mach/cpufreq.h>
 
-#define MSM_HOTPLUG		"msm-hotplug"
+#define MSM_HOTPLUG		"msm_hotplug"
 #define DEFAULT_UPDATE_RATE	HZ / 10
 #define START_DELAY		HZ * 20
+#define NUM_LOAD_LEVELS		5
 #define DEFAULT_HISTORY_SIZE	10
 #define DEFAULT_DOWN_LOCK_DUR	2000
 #define DEFAULT_SUSPEND_FREQ	702000
@@ -68,10 +70,11 @@ static struct cpu_stats {
 } stats = {
 	.update_rate = DEFAULT_UPDATE_RATE,
 	.hist_size = DEFAULT_HISTORY_SIZE,
-	.total_cpus = NR_CPUS,
+	.total_cpus = NR_CPUS
 };
 
 static DEFINE_SPINLOCK(stats_lock);
+static DEFINE_MUTEX(hotplug_lock);
 extern unsigned int report_load_at_max_freq(void);
 
 static struct cpu_stats *get_load_stats(void)
@@ -207,7 +210,7 @@ static void msm_hotplug_fn(struct work_struct *work)
 	online_cpus = st->online_cpus;
 
 	dprintk("%s: cur_load: %3u online_cpus: %u\n", MSM_HOTPLUG, cur_load,
-		online_cpus);
+	        online_cpus);
 
 	if (online_cpus == 1 && mako_boosted) {
 		online_cpu(hp);
@@ -273,6 +276,151 @@ static struct early_suspend msm_hotplug_suspend = {
 };
 #endif
 
+/************************** sysfs interface ************************/
+
+static ssize_t show_suspend_freq(struct device *dev,
+				 struct device_attribute *msm_hotplug_attrs,
+				 char *buf)
+{
+	struct cpu_hotplug *hp = &hotplug;
+
+	return sprintf(buf, "%u\n", hp->suspend_freq);
+}
+
+static ssize_t store_suspend_freq(struct device *dev,
+				  struct device_attribute *msm_hotplug_attrs,
+				  const char *buf, size_t count)
+{
+	unsigned int cpu = 0;
+	unsigned int ret, val = 0;
+	struct cpu_hotplug *hp = &hotplug;
+	struct cpufreq_policy *policy = cpufreq_cpu_get(cpu);
+
+	if (!policy)
+		return -EINVAL;
+
+	ret = sscanf(buf, "%u", &val);
+	if (ret != 1 || val < policy->min || val > policy->max)
+		return -EINVAL;
+
+	hp->suspend_freq = val;
+
+	return ret;
+}
+
+static ssize_t show_down_lock_duration(struct device *dev, struct device_attribute
+				       *msm_hotplug_attrs, char *buf)
+{
+	struct cpu_hotplug *hp = &hotplug;
+
+	return sprintf(buf, "%u\n", hp->down_lock_dur);
+}
+
+static ssize_t store_down_lock_duration(struct device *dev, struct device_attribute
+					*msm_hotplug_attrs, const char *buf,
+					size_t count)
+{
+	unsigned int ret;
+	struct cpu_hotplug *hp = &hotplug;
+
+	ret = sscanf(buf, "%u", &hp->suspend_freq);
+	if (ret != 1)
+		return -EINVAL;
+
+	return ret;
+}
+
+static ssize_t show_update_rate(struct device *dev,
+				struct device_attribute *msm_hotplug_attrs,
+				char *buf)
+{
+	struct cpu_stats *st = &stats;
+
+	return sprintf(buf, "%u\n", st->update_rate);
+}
+
+static ssize_t store_update_rate(struct device *dev,
+				 struct device_attribute *msm_hotplug_attrs,
+				 const char *buf, size_t count)
+{
+	unsigned int ret;
+	struct cpu_stats *st = &stats;
+
+	ret = sscanf(buf, "%u", &st->update_rate);
+	if (ret != 1)
+		return -EINVAL;
+
+	return ret;
+}
+
+static ssize_t show_load_levels(struct device *dev,
+				struct device_attribute *msm_hotplug_attrs,
+				char *buf)
+{
+	unsigned int i;
+	int len = 0;
+
+	if (!buf)
+		return -EINVAL;
+
+	for (i = 0; i < NUM_LOAD_LEVELS; i++) {
+		len += sprintf(buf + len, "%u ", i);
+		len += sprintf(buf + len, "%u ", load[i].up_threshold);
+		len += sprintf(buf + len, "%u", load[i].down_threshold);
+		len += sprintf(buf + len, "\n");
+	}
+
+	return len;
+}
+
+static ssize_t store_load_levels(struct device *dev,
+				 struct device_attribute *msm_hotplug_attrs,
+				 const char *buf, size_t count)
+{
+	int ret;
+	unsigned int val[3];
+
+	ret = sscanf(buf, "%u %u %u", &val[0], &val[1], &val[2]);
+	if (ret != ARRAY_SIZE(val))
+		return -EINVAL;
+
+	load[val[0]].up_threshold = val[1];
+	load[val[0]].down_threshold = val[2];
+
+	return ret;
+}
+
+static ssize_t show_current_load(struct device *dev,
+				 struct device_attribute *msm_hotplug_attrs,
+				 char *buf)
+{
+	struct cpu_stats *st = &stats;
+
+	return sprintf(buf, "%u\n", st->current_load);
+}
+
+static DEVICE_ATTR(suspend_freq, 644, show_suspend_freq, store_suspend_freq);
+static DEVICE_ATTR(down_lock_duration, 644, show_down_lock_duration,
+		   store_down_lock_duration);
+static DEVICE_ATTR(update_rate, 644, show_update_rate, store_update_rate);
+static DEVICE_ATTR(load_levels, 644, show_load_levels, store_load_levels);
+static DEVICE_ATTR(current_load, 444, show_current_load, NULL);
+
+static struct attribute *msm_hotplug_attrs[] = {
+	&dev_attr_suspend_freq.attr,
+	&dev_attr_down_lock_duration.attr,
+	&dev_attr_update_rate.attr,
+	&dev_attr_load_levels.attr,
+	&dev_attr_current_load.attr,
+	NULL,
+};
+
+static struct attribute_group attr_group = {
+	.attrs = msm_hotplug_attrs,
+};
+
+/************************** sysfs end ************************/
+
 static int __init msm_hotplug_init(void)
 {
 	int ret = 0;
@@ -314,6 +462,7 @@ static struct platform_device msm_hotplug_device = {
 static int __init msm_hotplug_device_init(void)
 {
 	int ret;
+	struct kobject *module_kobj;
 
 	ret = platform_device_register(&msm_hotplug_device);
 	if (ret) {
@@ -321,14 +470,24 @@ static int __init msm_hotplug_device_init(void)
 		return ret;
 	}
 
+	module_kobj = kset_find_obj(module_kset, MSM_HOTPLUG);
+	if (!module_kobj) {
+		pr_err("%s: Cannot find kobject for module\n", MSM_HOTPLUG);
+		return -ENOENT;
+	}
+
+	ret = sysfs_create_group(module_kobj, &attr_group);
+	if (ret)
+		return pr_err("%s: Creation of sysfs: %d\n", MSM_HOTPLUG, ret);
+
 	pr_info("%s: Device init\n", MSM_HOTPLUG);
 
 	return ret;
 }
 
-EXPORT_SYMBOL_GPL(msm_hotplug_exit);
+EXPORT_SYMBOL_GPL(msm_hotplug_device_init);
 
-static void __exit msm_hotplug_exit(void)
+static void __exit msm_hotplug_device_exit(void)
 {
 	struct cpu_hotplug *hp = &hotplug;
 	struct cpu_stats *st = &stats;
@@ -340,7 +499,7 @@ static void __exit msm_hotplug_exit(void)
 EXPORT_SYMBOL_GPL(msm_hotplug_device_init);
 
 late_initcall(msm_hotplug_device_init);
-module_exit(msm_hotplug_exit);
+module_exit(msm_hotplug_device_exit);
 
 MODULE_AUTHOR("Fluxi <linflux@arcor.de>");
 MODULE_DESCRIPTION("MSM Hotplug Driver");
