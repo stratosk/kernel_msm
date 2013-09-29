@@ -263,10 +263,14 @@ static void msm_hotplug_early_suspend(struct early_suspend *handler)
 {
 	unsigned int cpu = 0;
 	struct cpu_hotplug *hp = &hotplug;
+	struct cpu_stats *st = &stats;
 	struct cpufreq_policy *policy = cpufreq_cpu_get(cpu);
 
 	if (!policy)
 		return;
+
+	atomic_set(&hp->down_lock, 0);
+	offline_cpu(st->min_cpus);
 
 	flush_workqueue(hotplug_wq);
 	cancel_delayed_work_sync(&hotplug_work);
@@ -286,6 +290,8 @@ static void msm_hotplug_late_resume(struct early_suspend *handler)
 
 	if (!policy)
 		return;
+
+	online_cpu(st->total_cpus);
 
 	for_each_possible_cpu(cpu)
 	    msm_cpufreq_set_freq_limits(cpu, policy->min, policy->max);
