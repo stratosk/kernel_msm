@@ -78,6 +78,9 @@ static struct cpu_stats {
 
 static DEFINE_SPINLOCK(stats_lock);
 static DEFINE_MUTEX(hotplug_lock);
+#ifdef CONFIG_HAS_EARLYSUSPEND
+extern int get_suspend_state(void);
+#endif
 extern unsigned int report_load_at_max_freq(void);
 
 static struct cpu_stats *get_load_stats(void)
@@ -327,8 +330,8 @@ static ssize_t store_suspend_freq(struct device *dev,
 				  struct device_attribute *msm_hotplug_attrs,
 				  const char *buf, size_t count)
 {
-	unsigned int cpu = 0;
-	unsigned int ret, val = 0;
+	unsigned int ret;
+	unsigned int val = 0, cpu = 0;
 	struct cpu_hotplug *hp = &hotplug;
 	struct cpufreq_policy *policy = cpufreq_cpu_get(cpu);
 
@@ -344,7 +347,8 @@ static ssize_t store_suspend_freq(struct device *dev,
 	return ret;
 }
 
-static ssize_t show_down_lock_duration(struct device *dev, struct device_attribute
+static ssize_t show_down_lock_duration(struct device *dev,
+				       struct device_attribute
 				       *msm_hotplug_attrs, char *buf)
 {
 	struct cpu_hotplug *hp = &hotplug;
@@ -352,16 +356,20 @@ static ssize_t show_down_lock_duration(struct device *dev, struct device_attribu
 	return sprintf(buf, "%u\n", hp->down_lock_dur);
 }
 
-static ssize_t store_down_lock_duration(struct device *dev, struct device_attribute
+static ssize_t store_down_lock_duration(struct device *dev,
+					struct device_attribute
 					*msm_hotplug_attrs, const char *buf,
 					size_t count)
 {
-	unsigned int ret;
+	int ret;
+	unsigned int val;
 	struct cpu_hotplug *hp = &hotplug;
 
-	ret = sscanf(buf, "%u", &hp->suspend_freq);
+	ret = sscanf(buf, "%u", &val);
 	if (ret != 1)
 		return -EINVAL;
+
+	hp->suspend_freq = val;
 
 	return ret;
 }
@@ -379,12 +387,15 @@ static ssize_t store_update_rate(struct device *dev,
 				 struct device_attribute *msm_hotplug_attrs,
 				 const char *buf, size_t count)
 {
-	unsigned int ret;
+	int ret;
+	unsigned int val;
 	struct cpu_stats *st = &stats;
 
-	ret = sscanf(buf, "%u", &st->update_rate);
+	ret = sscanf(buf, "%u", &val);
 	if (ret != 1)
 		return -EINVAL;
+
+	st->update_rate = val;
 
 	return ret;
 }
@@ -393,8 +404,7 @@ static ssize_t show_load_levels(struct device *dev,
 				struct device_attribute *msm_hotplug_attrs,
 				char *buf)
 {
-	unsigned int i;
-	int len = 0;
+	int i, len = 0;
 
 	if (!buf)
 		return -EINVAL;
@@ -426,13 +436,63 @@ static ssize_t store_load_levels(struct device *dev,
 	return ret;
 }
 
-static ssize_t show_current_load(struct device *dev,
+static ssize_t show_history_size(struct device *dev,
 				 struct device_attribute *msm_hotplug_attrs,
 				 char *buf)
 {
 	struct cpu_stats *st = &stats;
 
-	return sprintf(buf, "%u\n", st->current_load);
+	return sprintf(buf, "%u\n", st->hist_size);
+}
+
+static ssize_t store_history_size(struct device *dev,
+				  struct device_attribute *msm_hotplug_attrs,
+				  const char *buf, size_t count)
+{
+	int ret, state;
+	unsigned int val;
+	struct cpu_stats *st = &stats;
+
+	ret = sscanf(buf, "%u", &val);
+	if (ret != 1 || val == 0)
+		return -EINVAL;
+
+	flush_workqueue(hotplug_wq);
+	cancel_delayed_work_sync(&hotplug_work);
+
+	kfree(st->load_hist);
+	st->hist_size = val;
+
+	st->load_hist = kmalloc(sizeof(st->hist_size), GFP_KERNEL);
+	if (!st->load_hist)
+		return -ENOMEM;
+
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	state = get_suspend_state();
+	if (state == 0)
+#endif
+		reschedule_hotplug_fn(st);
+
+	return ret;
+}
+
+static ssize_t show_current_load(struct device *dev,
+				 struct device_attribute *msm_hotplug_attrs,
+				 char *buf)
+{
+	int state;
+	unsigned int load;
+	struct cpu_stats *st = &stats;
+
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	state = get_suspend_state();
+	if (state > 0)
+		load = 0;
+	else
+#endif
+		load = st->current_load;
+
+	return sprintf(buf, "%u\n", load);
 }
 
 static DEVICE_ATTR(suspend_freq, 644, show_suspend_freq, store_suspend_freq);
@@ -440,6 +500,7 @@ static DEVICE_ATTR(down_lock_duration, 644, show_down_lock_duration,
 		   store_down_lock_duration);
 static DEVICE_ATTR(update_rate, 644, show_update_rate, store_update_rate);
 static DEVICE_ATTR(load_levels, 644, show_load_levels, store_load_levels);
+static DEVICE_ATTR(history_size, 644, show_history_size, store_history_size);
 static DEVICE_ATTR(current_load, 444, show_current_load, NULL);
 
 static struct attribute *msm_hotplug_attrs[] = {
@@ -447,6 +508,7 @@ static struct attribute *msm_hotplug_attrs[] = {
 	&dev_attr_down_lock_duration.attr,
 	&dev_attr_update_rate.attr,
 	&dev_attr_load_levels.attr,
+	&dev_attr_history_size.attr,
 	&dev_attr_current_load.attr,
 	NULL,
 };
