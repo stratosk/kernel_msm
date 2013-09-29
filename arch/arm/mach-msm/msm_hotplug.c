@@ -45,6 +45,7 @@ do { 				\
 
 static struct cpu_hotplug {
 	unsigned int suspend_freq;
+	atomic_t target_cpus;
 	atomic_t down_lock;
 	unsigned int down_lock_dur;
 	struct work_struct up_work;
@@ -64,12 +65,14 @@ static struct cpu_stats {
 	unsigned int *load_hist;
 	unsigned int hist_size;
 	unsigned int hist_cnt;
+	unsigned int min_cpus;
 	unsigned int total_cpus;
 	unsigned int online_cpus;
 	unsigned int current_load;
 } stats = {
 	.update_rate = DEFAULT_UPDATE_RATE,
 	.hist_size = DEFAULT_HISTORY_SIZE,
+	.min_cpus = 1,
 	.total_cpus = NR_CPUS
 };
 
@@ -125,8 +128,10 @@ static struct load_thresh_tbl load[] = {
 	LOAD_SCALE(410, 140),
 };
 
-static void apply_down_lock(struct cpu_hotplug *hp)
+static void apply_down_lock(void)
 {
+	struct cpu_hotplug *hp = &hotplug;
+
 	atomic_set(&hp->down_lock, 1);
 	mod_timer(&hp->lock_timer,
 		  jiffies + msecs_to_jiffies(hp->down_lock_dur));
@@ -146,12 +151,17 @@ EXPORT_SYMBOL_GPL(handle_lock_timer);
 static void __ref cpu_up_work(struct work_struct *work)
 {
 	int cpu;
+	int target;
+	struct cpu_hotplug *hp = &hotplug;
+
+	target = atomic_read(&hp->target_cpus);
 
 	for_each_cpu_not(cpu, cpu_online_mask) {
+		if (target == num_online_cpus())
+			break;
 		if (cpu == 0)
 			continue;
 		cpu_up(cpu);
-		break;
 	}
 }
 
@@ -160,33 +170,42 @@ EXPORT_SYMBOL_GPL(cpu_up_work);
 static void cpu_down_work(struct work_struct *work)
 {
 	int cpu;
-	int lock;
+	int lock, target;
 	struct cpu_hotplug *hp = &hotplug;
 
 	lock = atomic_read(&hp->down_lock);
 	if (lock)
 		return;
 
+	target = atomic_read(&hp->target_cpus);
+
 	for_each_online_cpu(cpu) {
 		if (cpu == 0)
 			continue;
 		cpu_down(cpu);
-		break;
+		if (target == num_online_cpus())
+			break;
 	}
 }
 
 EXPORT_SYMBOL_GPL(cpu_down_work);
 
-static void online_cpu(struct cpu_hotplug *hp)
+static void online_cpu(unsigned int target)
 {
+	struct cpu_hotplug *hp = &hotplug;
+
+	atomic_set(&hp->target_cpus, target);
+	apply_down_lock();
 	queue_work_on(0, hotplug_wq, &hp->up_work);
-	apply_down_lock(hp);
 }
 
 EXPORT_SYMBOL_GPL(online_cpu);
 
-static void offline_cpu(struct cpu_hotplug *hp)
+static void offline_cpu(unsigned int target)
 {
+	struct cpu_hotplug *hp = &hotplug;
+
+	atomic_set(&hp->target_cpus, target);
 	queue_work_on(0, hotplug_wq, &hp->down_work);
 }
 
@@ -202,27 +221,38 @@ EXPORT_SYMBOL_GPL(reschedule_hotplug_fn);
 
 static void msm_hotplug_fn(struct work_struct *work)
 {
-	unsigned int cur_load, online_cpus;
+	unsigned int cur_load, online_cpus, target = 0;
+	unsigned int i;
 	struct cpu_stats *st = get_load_stats();
-	struct cpu_hotplug *hp = &hotplug;
 
 	cur_load = st->current_load;
 	online_cpus = st->online_cpus;
 
-	dprintk("%s: cur_load: %3u online_cpus: %u\n", MSM_HOTPLUG, cur_load,
-	        online_cpus);
-
-	if (online_cpus == 1 && mako_boosted) {
-		online_cpu(hp);
+	if (online_cpus == st->min_cpus && mako_boosted) {
+		dprintk("%s: cur_load: %3u online_cpus: %u mako_boosted\n",
+			MSM_HOTPLUG, cur_load, online_cpus);
+		online_cpu(st->min_cpus + 1);
 		reschedule_hotplug_fn(st);
 		return;
 	}
 
-	if (cur_load >= load[online_cpus].up_threshold) {
-		online_cpu(hp);
-	} else if (cur_load < load[online_cpus].down_threshold) {
-		offline_cpu(hp);
+	for (i = st->min_cpus; i < NUM_LOAD_LEVELS; i++) {
+		if (cur_load <= load[i].up_threshold
+		    && cur_load > load[i].down_threshold) {
+			target = i;
+			break;
+		}
 	}
+
+	if (online_cpus != target) {
+		if (target > online_cpus)
+			online_cpu(target);
+		else if (target < online_cpus)
+			offline_cpu(target);
+	}
+
+	dprintk("%s: cur_load: %3u online_cpus: %u target: %u\n", MSM_HOTPLUG,
+		cur_load, online_cpus, target);
 
 	reschedule_hotplug_fn(st);
 }
