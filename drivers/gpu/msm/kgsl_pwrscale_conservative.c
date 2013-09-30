@@ -83,7 +83,7 @@ static void conservative_idle(struct kgsl_device *device,
 	int val = 0;
 	unsigned int loadpct;
 
-	if (mako_boosted == 1) {
+	if (lge_boosted == 1) {
 		if (boosted_pwrlevel < pwr->active_pwrlevel)
 			kgsl_pwrctrl_pwrlevel_change(device, boosted_pwrlevel);
 
