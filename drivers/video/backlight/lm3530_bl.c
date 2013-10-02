@@ -185,8 +185,6 @@ void lm3530_lcd_backlight_set_level(int level)
 		return;
 	}
 
-	if (level < min_br)
-		level = min_br;
 	if (level > max_br)
 		level = max_br;
 
