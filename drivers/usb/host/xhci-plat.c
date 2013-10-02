@@ -39,6 +39,8 @@ static void xhci_plat_quirks(struct device *dev, struct xhci_hcd *xhci)
 	else if (pdata->vendor == SYNOPSIS_DWC3_VENDOR &&
 			pdata->revision < 0x230A)
 		xhci->quirks |= XHCI_PORTSC_DELAY;
+
+	xhci->quirks |= XHCI_PLAT;
 }
 
 /* called during probe() after chip reset completes */
