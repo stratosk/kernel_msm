@@ -594,7 +594,7 @@ static void __exit msm_hotplug_device_exit(void)
 	kfree(st->load_hist);
 }
 
-EXPORT_SYMBOL_GPL(msm_hotplug_device_init);
+EXPORT_SYMBOL_GPL(msm_hotplug_device_exit);
 
 late_initcall(msm_hotplug_device_init);
 module_exit(msm_hotplug_device_exit);
