@@ -37,7 +37,7 @@
 
 /* Resources */
 unsigned int retry_cnt = 0;
-bool s2w_switch = true;
+bool s2w_switch = false;
 bool s2w_error = false;
 bool scr_suspended = false, exec_count = true;
 bool barrier[2] = { false, false };
