@@ -37,6 +37,7 @@
 #include <linux/gpio.h>
 
 #include <linux/input/lge_touch_core.h>
+
 #ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
 #include <linux/input/sweep2wake.h>
 #endif
@@ -112,7 +113,7 @@ static void touch_late_resume(struct early_suspend *h);
 #endif
 
 #ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
-/* returns true if only one touch is recognized */
+/* gives back true if only one touch is recognized */
 bool is_single_touch(struct lge_touch_data *ts)
 {
         int i = 0, cnt = 0;
@@ -821,8 +822,7 @@ static void touch_input_report(struct lge_touch_data *ts)
 					ts->ts_data.curr_data[id].width_minor);
 
 #ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
-                        detect_sweep2wake(ts->ts_data.curr_data[id].x_position,
-				ts->ts_data.curr_data[id].y_position, ts);
+                        detect_sweep2wake(ts->ts_data.curr_data[id].x_position, ts->ts_data.curr_data[id].y_position, ts);
 #endif
 
 #ifdef LGE_TOUCH_POINT_DEBUG
@@ -836,7 +836,7 @@ static void touch_input_report(struct lge_touch_data *ts)
 		else {
 			ts->ts_data.curr_data[id].state = 0;
 #ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
-                        if (s2w_switch) {
+                        if (s2w_switch > 0) {
                                 exec_count = true;
                                 barrier[0] = false;
                                 barrier[1] = false;
@@ -1020,7 +1020,7 @@ static void touch_fw_upgrade_func(struct work_struct *work_fw_upgrade)
 
 	if (!ts->curr_resume_state) {
 #ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
-                if (!s2w_switch)
+                if (s2w_switch == 0)
 #endif
                         touch_power_cntl(ts, POWER_OFF);
 	}
@@ -1949,23 +1949,25 @@ static void touch_psy_init(struct lge_touch_data *ts)
 static ssize_t lge_touch_sweep2wake_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	return sprintf(buf, "%d\n", s2w_switch ? 1 : 0);
+	size_t count = 0;
+
+	count += sprintf(buf, "%d\n", s2w_switch);
+
+	return count;
 }
 
-static ssize_t lge_touch_sweep2wake_store(struct device *dev,
+static ssize_t lge_touch_sweep2wake_dump(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	unsigned int value;
-
-	sscanf(buf, "%d", &value);
-
-	s2w_switch = value ? 1 : 0;
+	if (buf[0] >= '0' && buf[0] <= '2' && buf[1] == '\n')
+                if (s2w_switch != buf[0] - '0')
+		        s2w_switch = buf[0] - '0';
 
 	return count;
 }
 
 static DEVICE_ATTR(sweep2wake, (S_IWUSR|S_IRUGO),
-	lge_touch_sweep2wake_show, lge_touch_sweep2wake_store);
+	lge_touch_sweep2wake_show, lge_touch_sweep2wake_dump);
 #endif
 
 static struct kobject *android_touch_kobj;
@@ -2152,11 +2154,11 @@ static int touch_probe(struct i2c_client *client,
 		ret = request_threaded_irq(client->irq, touch_irq_handler,
 				NULL,
 #ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
-		ts->pdata->role->irqflags | IRQF_ONESHOT | IRQF_TRIGGER_LOW | IRQF_NO_SUSPEND,
+				ts->pdata->role->irqflags | IRQF_ONESHOT | IRQF_TRIGGER_LOW | IRQF_NO_SUSPEND,
 #else
-		ts->pdata->role->irqflags | IRQF_ONESHOT,
+				ts->pdata->role->irqflags | IRQF_ONESHOT,
 #endif
-			client->name, ts);
+				client->name, ts);
 
 		if (ret < 0) {
 			TOUCH_ERR_MSG("request_irq failed. use polling mode\n");
@@ -2326,8 +2328,9 @@ static void touch_early_suspend(struct early_suspend *h)
 	}
 
 #ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
-        if (!s2w_switch) {
+        if (s2w_switch == 0)
 #endif
+        {
 	        if (ts->pdata->role->operation_mode == INTERRUPT_MODE)
 		                disable_irq(ts->client->irq);
 	        else
@@ -2341,11 +2344,11 @@ static void touch_early_suspend(struct early_suspend *h)
 	        release_all_ts_event(ts);
 
 	        touch_power_cntl(ts, ts->pdata->role->suspend_pwr);
+        }
 #ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
-        } else {
+        else if (s2w_switch > 0) {
                 enable_irq_wake(ts->client->irq);
-		release_all_ts_event(ts);
-	}
+        }
 #endif
 }
 
@@ -2369,8 +2372,9 @@ static void touch_late_resume(struct early_suspend *h)
 	}
 
 #ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
-        if (!s2w_switch) {
+        if (s2w_switch == 0)
 #endif
+        {
 	        touch_power_cntl(ts, ts->pdata->role->resume_pwr);
 
 	        if (ts->pdata->role->operation_mode == INTERRUPT_MODE)
@@ -2385,9 +2389,9 @@ static void touch_late_resume(struct early_suspend *h)
 			        msecs_to_jiffies(ts->pdata->role->booting_delay));
 	        else
 		        queue_delayed_work(touch_wq, &ts->work_init, 0);
-
+        }
 #ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
-	} else
+        else if (s2w_switch > 0)
                 disable_irq_wake(ts->client->irq);
 #endif
 }
