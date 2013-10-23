@@ -854,12 +854,8 @@ static void input_timeout(unsigned long timeout)
 static void dbs_input_event(struct input_handle *handle, unsigned int type,
 		unsigned int code, int value)
 {
-	if (!touch) {
-		touch = true;
-		input_timer.expires = jiffies + timer_delay;
-		add_timer(&input_timer);
-	} else
-		mod_timer(&input_timer, jiffies + timer_delay);
+	touch = true;
+	mod_timer(&input_timer, jiffies + timer_delay);
 }
 
 static int dbs_input_connect(struct input_handler *handler,
