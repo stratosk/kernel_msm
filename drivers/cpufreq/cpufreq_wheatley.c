@@ -121,6 +121,7 @@ static struct dbs_tuners {
     unsigned int io_is_busy;
     unsigned int target_residency;
     unsigned int allowed_misses;
+	unsigned int boostfreq;
 } dbs_tuners_ins = {
     .up_threshold = DEF_FREQUENCY_UP_THRESHOLD,
     .sampling_down_factor = DEF_SAMPLING_DOWN_FACTOR,
@@ -129,6 +130,8 @@ static struct dbs_tuners {
     .powersave_bias = 0,
     .target_residency = DEF_TARGET_RESIDENCY,
     .allowed_misses = DEF_ALLOWED_MISSES,
+	.boostfreq = 1026000,
+	.io_is_busy = 1,
 };
 
 static inline u64 get_cpu_idle_time_jiffy(unsigned int cpu,
@@ -271,6 +274,7 @@ show_one(ignore_nice_load, ignore_nice);
 show_one(powersave_bias, powersave_bias);
 show_one(target_residency, target_residency);
 show_one(allowed_misses, allowed_misses);
+show_one(boostfreq, boostfreq);
 
 static ssize_t store_sampling_rate(struct kobject *a, struct attribute *b,
 				   const char *buf, size_t count)
@@ -397,6 +401,18 @@ static ssize_t store_target_residency(struct kobject *a, struct attribute *b,
     return count;
 }
 
+static ssize_t store_boostfreq(struct kobject *a, struct attribute *b,
+				   const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+	if (ret != 1)
+		return -EINVAL;
+	dbs_tuners_ins.boostfreq = input;
+	return count;
+}
+
 static ssize_t store_allowed_misses(struct kobject *a, struct attribute *b,
 				    const char *buf, size_t count)
 {
@@ -419,6 +435,7 @@ define_one_global_rw(ignore_nice_load);
 define_one_global_rw(powersave_bias);
 define_one_global_rw(target_residency);
 define_one_global_rw(allowed_misses);
+define_one_global_rw(boostfreq);
 
 static struct attribute *dbs_attributes[] = {
     &sampling_rate_min.attr,
@@ -430,6 +447,7 @@ static struct attribute *dbs_attributes[] = {
     &io_is_busy.attr,
     &target_residency.attr,
     &allowed_misses.attr,
+	&boostfreq.attr,
     NULL
 };
 
@@ -554,6 +572,14 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	    num_misses++;
     }
 
+	/* Check for frequency boost */
+	if (lge_boosted && policy->cpu == 0 &&
+			policy->cur < dbs_tuners_ins.boostfreq) {
+		__cpufreq_driver_target(policy, dbs_tuners_ins.boostfreq,
+			CPUFREQ_RELATION_H);
+		return;
+	}
+
     /* Check for frequency increase */
     if (max_load_freq > dbs_tuners_ins.up_threshold * policy->cur 
 	|| num_misses <= dbs_tuners_ins.allowed_misses) {
@@ -582,6 +608,14 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	freq_next = max_load_freq /
 	    (dbs_tuners_ins.up_threshold -
 	     dbs_tuners_ins.down_differential);
+
+		if (lge_boosted && policy->cpu == 0) {
+			if (dbs_tuners_ins.boostfreq &&
+					freq_next < dbs_tuners_ins.boostfreq)
+				freq_next = dbs_tuners_ins.boostfreq;
+			else
+				freq_next = policy->max;
+		}
 
 	/* No longer fully busy, reset rate_mult */
 	this_dbs_info->rate_mult = 1;
