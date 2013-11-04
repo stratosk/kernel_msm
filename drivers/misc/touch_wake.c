@@ -113,6 +113,23 @@ out:
 	device_suspended = false;
 }
 
+static void disable_touchwake(void)
+{
+	if (!touchwake_enabled)
+		return;
+
+	cancel_delayed_work(&touchoff_work);
+	flush_scheduled_work();
+
+	if (wake_lock_active(&touchwake_wake_lock)) {
+		touchwake_disable_touch();
+		wake_unlock(&touchwake_wake_lock);
+		led_trigger_event(&touchwake_led_trigger, LED_OFF);
+	}
+
+	touchwake_enabled = false;
+};
+
 static struct early_suspend touchwake_suspend_data = {
 	.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN,
 	.suspend = touchwake_early_suspend,
@@ -194,7 +211,7 @@ static ssize_t touchwake_status_write(struct device *dev,
 		touchwake_enabled = true;
 	} else if (data == 0) {
 		pr_info("%s: TOUCHWAKE function disabled\n", __func__);
-		touchwake_enabled = false;
+		disable_touchwake();
 	}
 
 	return size;
