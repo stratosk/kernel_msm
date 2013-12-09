@@ -986,7 +986,11 @@ static void gsm_dlci_data_kick(struct gsm_dlci *dlci)
 			gsm_dlci_data_output(dlci->gsm, dlci);
 	}
 	if (sweep)
+<<<<<<< HEAD
  		gsm_dlci_data_sweep(dlci->gsm);
+=======
+     gsm_dlci_data_sweep(dlci->gsm);
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 	spin_unlock_irqrestore(&dlci->gsm->tx_lock, flags);
 }
 

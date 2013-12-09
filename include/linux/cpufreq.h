@@ -22,6 +22,8 @@
 #include <asm/div64.h>
 
 #define CPUFREQ_NAME_LEN 16
+/* Print length for names. Extra 1 space for accomodating '\n' in prints */
+#define CPUFREQ_NAME_PLEN (CPUFREQ_NAME_LEN + 1)
 
 
 /*********************************************************************
@@ -205,6 +207,8 @@ void cpufreq_unregister_governor(struct cpufreq_governor *governor);
 int lock_policy_rwsem_write(int cpu);
 void unlock_policy_rwsem_write(int cpu);
 
+extern int lge_boosted;
+
 /*********************************************************************
  *                      CPUFREQ DRIVER INTERFACE                     *
  *********************************************************************/
@@ -359,6 +363,9 @@ extern struct cpufreq_governor cpufreq_gov_performance;
 #elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_POWERSAVE)
 extern struct cpufreq_governor cpufreq_gov_powersave;
 #define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_powersave)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_WHEATLEY)
+extern struct cpufreq_governor cpufreq_gov_wheatley;
+#define CPUFREQ_DEFAULT_GOVERNOR  (&cpufreq_gov_wheatley)
 #elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_USERSPACE)
 extern struct cpufreq_governor cpufreq_gov_userspace;
 #define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_userspace)
@@ -371,6 +378,9 @@ extern struct cpufreq_governor cpufreq_gov_conservative;
 #elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_INTERACTIVE)
 extern struct cpufreq_governor cpufreq_gov_interactive;
 #define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_interactive)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_INTELLIDEMAND)
+extern struct cpufreq_governor cpufreq_gov_intellidemand;
+#define CPUFREQ_DEFAULT_GOVERNOR        (&cpufreq_gov_intellidemand)
 #endif
 
 

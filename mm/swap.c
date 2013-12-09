@@ -174,6 +174,7 @@ bool __get_page_tail(struct page *page)
 	unsigned long flags;
 	bool got = false;
 	struct page *page_head;
+<<<<<<< HEAD
 
 	/*
 	 * If this is a hugetlbfs page it cannot be split under us.  Simply
@@ -186,6 +187,20 @@ bool __get_page_tail(struct page *page)
 		goto out;
 	}
 
+=======
+
+	/*
+	 * If this is a hugetlbfs page it cannot be split under us.  Simply
+	 * increment refcount for the head page.
+	 */
+	if (PageHuge(page)) {
+		page_head = compound_head(page);
+		atomic_inc(&page_head->_count);
+		got = true;
+		goto out;
+	}
+
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 	page_head = compound_trans_head(page);
 	if (likely(page != page_head && get_page_unless_zero(page_head))) {
 		/*
@@ -646,6 +661,9 @@ void release_pages(struct page **pages, int nr, int cold)
 			__ClearPageLRU(page);
 			del_page_from_lru_list(zone, page, page_off_lru(page));
 		}
+
+		/* Clear Active bit in case of parallel mark_page_accessed */
+		ClearPageActive(page);
 
 		list_add(&page->lru, &pages_to_free);
 	}

@@ -1270,7 +1270,10 @@ retry:
 					new_extra_isize = s_min_extra_isize;
 					kfree(is); is = NULL;
 					kfree(bs); bs = NULL;
+<<<<<<< HEAD
 					brelse(bh);
+=======
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 					goto retry;
 				}
 				error = -1;

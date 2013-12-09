@@ -161,7 +161,7 @@ struct hrtimer_clock_base *lock_hrtimer_base(const struct hrtimer *timer,
 static int hrtimer_get_target(int this_cpu, int pinned)
 {
 #ifdef CONFIG_NO_HZ
-	if (!pinned && get_sysctl_timer_migration() && idle_cpu(this_cpu))
+	if (!pinned && get_sysctl_timer_migration())
 		return get_nohz_timer_target();
 #endif
 	return this_cpu;
@@ -225,10 +225,13 @@ again:
 		raw_spin_unlock(&base->cpu_base->lock);
 		raw_spin_lock(&new_base->cpu_base->lock);
 
-		if (cpu != this_cpu && hrtimer_check_target(timer, new_base)) {
-			cpu = this_cpu;
+		this_cpu = smp_processor_id();
+
+		if (cpu != this_cpu && (hrtimer_check_target(timer, new_base)
+			|| !cpu_online(cpu))) {
 			raw_spin_unlock(&new_base->cpu_base->lock);
 			raw_spin_lock(&base->cpu_base->lock);
+			cpu = smp_processor_id();
 			timer->base = base;
 			goto again;
 		}
@@ -653,10 +656,17 @@ static inline int hrtimer_enqueue_reprogram(struct hrtimer *timer,
 
 static inline ktime_t hrtimer_update_base(struct hrtimer_cpu_base *base)
 {
+<<<<<<< HEAD
 	ktime_t *offs_real = &base->clock_base[HRTIMER_BASE_REALTIME].offset;
 	ktime_t *offs_boot = &base->clock_base[HRTIMER_BASE_BOOTTIME].offset;
 
 	return ktime_get_update_offsets(offs_real, offs_boot);
+=======
+  ktime_t *offs_real = &base->clock_base[HRTIMER_BASE_REALTIME].offset;
+  ktime_t *offs_boot = &base->clock_base[HRTIMER_BASE_BOOTTIME].offset;
+
+  return ktime_get_update_offsets(offs_real, offs_boot);
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 }
 
 /*
@@ -1246,7 +1256,7 @@ static void __run_hrtimer(struct hrtimer *timer, ktime_t *now)
 	 * hrtimer_start_range_ns() or in hrtimer_interrupt()
 	 */
 	if (restart != HRTIMER_NORESTART) {
-		BUG_ON(timer->state != HRTIMER_STATE_CALLBACK);
+		BUG_ON(!(timer->state & HRTIMER_STATE_CALLBACK));
 		enqueue_hrtimer(timer, base);
 	}
 
@@ -1591,7 +1601,7 @@ long hrtimer_nanosleep(struct timespec *rqtp, struct timespec __user *rmtp,
 	int ret = 0;
 	unsigned long slack;
 
-	slack = current->timer_slack_ns;
+	slack = task_get_effective_timer_slack(current);
 	if (rt_task(current))
 		slack = 0;
 

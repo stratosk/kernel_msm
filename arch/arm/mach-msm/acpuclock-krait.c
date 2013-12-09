@@ -50,9 +50,14 @@
 static DEFINE_MUTEX(driver_lock);
 static DEFINE_SPINLOCK(l2_lock);
 
+<<<<<<< HEAD
 #ifdef CONFIG_DEBUG_FS
 static int gpvs_bin;
 #endif
+=======
+char *cpu_type = "Unknown";
+module_param(cpu_type, charp, 0755);
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 
 static struct drv_data {
 	struct acpu_level *acpu_freq_tbl;
@@ -617,9 +622,8 @@ static void __cpuinit hfpll_init(struct scalable *sc,
 		writel_relaxed(drv.hfpll_data->droop_val,
 			       sc->hfpll_base + drv.hfpll_data->droop_offset);
 
-	/* Set an initial rate and enable the PLL. */
+	/* Set an initial PLL rate. */
 	hfpll_set_rate(sc, tgt_s);
-	hfpll_enable(sc, false);
 }
 
 static int __cpuinit rpm_regulator_init(struct scalable *sc, enum vregs vreg,
@@ -790,7 +794,9 @@ static int __cpuinit init_clock_sources(struct scalable *sc,
 	regval &= ~(0x3 << 6);
 	set_l2_indirect_reg(sc->l2cpmr_iaddr, regval);
 
-	/* Switch to the target clock source. */
+	/* Enable and switch to the target clock source. */
+	if (tgt_s->src == HFPLL)
+		hfpll_enable(sc, false);
 	set_pri_clk_src(sc, tgt_s->pri_src_sel);
 	sc->cur_speed = tgt_s;
 
@@ -912,6 +918,54 @@ static void __init bus_init(const struct l2_level *l2_level)
 	if (ret)
 		dev_err(drv.dev, "initial bandwidth req failed (%d)\n", ret);
 }
+
+#ifdef CONFIG_USERSPACE_VOLTAGE_CONTROL
+
+#define HFPLL_MIN_VDD		 500000
+#define HFPLL_MAX_VDD		1200000
+
+ssize_t acpuclk_get_vdd_levels_str(char *buf) {
+
+	int i, len = 0;
+
+	if (buf) {
+		mutex_lock(&driver_lock);
+
+		for (i = 0; drv.acpu_freq_tbl[i].speed.khz; i++) {
+			/* updated to use uv required by 8x60 architecture - faux123 */
+			len += sprintf(buf + len, "%8lu: %8d\n", drv.acpu_freq_tbl[i].speed.khz,
+				drv.acpu_freq_tbl[i].vdd_core );
+		}
+
+		mutex_unlock(&driver_lock);
+	}
+	return len;
+}
+
+/* updated to use uv required by 8x60 architecture - faux123 */
+void acpuclk_set_vdd(unsigned int khz, int vdd_uv) {
+
+	int i;
+	unsigned int new_vdd_uv;
+
+	mutex_lock(&driver_lock);
+
+	for (i = 0; drv.acpu_freq_tbl[i].speed.khz; i++) {
+		if (khz == 0)
+			new_vdd_uv = min(max((unsigned int)(drv.acpu_freq_tbl[i].vdd_core + vdd_uv),
+				(unsigned int)HFPLL_MIN_VDD), (unsigned int)HFPLL_MAX_VDD);
+		else if ( drv.acpu_freq_tbl[i].speed.khz == khz)
+			new_vdd_uv = min(max((unsigned int)vdd_uv,
+				(unsigned int)HFPLL_MIN_VDD), (unsigned int)HFPLL_MAX_VDD);
+		else 
+			continue;
+
+		drv.acpu_freq_tbl[i].vdd_core = new_vdd_uv;
+	}
+	pr_warn("User voltage table modified!\n");
+	mutex_unlock(&driver_lock);
+}
+#endif
 
 #ifdef CONFIG_CPU_FREQ_MSM
 static struct cpufreq_frequency_table freq_table[NR_CPUS][35];
@@ -1051,13 +1105,26 @@ static int __init get_pvs_bin(u32 pte_efuse)
 
 	if (pvs_bin == 0x7) {
 		pvs_bin = 0;
-		dev_warn(drv.dev, "ACPU PVS: Defaulting to %d\n", pvs_bin);
-	} else {
-		dev_info(drv.dev, "ACPU PVS: %d\n", pvs_bin);
 	}
+<<<<<<< HEAD
 #ifdef CONFIG_DEBUG_FS
 	gpvs_bin = pvs_bin;
 #endif
+=======
+
+	// Report PVS Bin
+	switch(pvs_bin)
+	{
+		case 0: cpu_type = "Slow";break;
+		case 1: cpu_type = "Nominal";break;
+		case 2: cpu_type = "Fast";break;
+		case 3: cpu_type = "Faster";break;
+		default: cpu_type = "Unknown";break;
+	}
+
+	dev_info(drv.dev, "ACPU PVS: %s\n", cpu_type);
+
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 	return pvs_bin;
 }
 

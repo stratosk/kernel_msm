@@ -10,6 +10,11 @@
  */
 #include <linux/linkage.h>
 
+#ifdef CONFIG_KEXEC_HARDBOOT
+  #include <asm/kexec.h>
+  #include <asm/memory.h>
+#endif
+
 /*
  * Debugging stuff
  *
@@ -134,6 +139,97 @@ start:
  THUMB(		.thumb			)
 1:		mov	r7, r1			@ save architecture ID
 		mov	r8, r2			@ save atags pointer
+
+#ifdef CONFIG_KEXEC_HARDBOOT
+		/* Check hardboot page for a kexec kernel. */
+		ldr	r3, =KEXEC_HB_PAGE_ADDR
+		ldr	r0, [r3]
+		ldr	r1, =KEXEC_HB_PAGE_MAGIC
+		teq	r0, r1
+		bne	not_booting_other
+
+		/* Clear hardboot page magic to avoid boot loop. */
+		mov	r0, #0
+		str	r0, [r3]
+
+/* Copy the kernel tagged list (atags):
+ *
+ * The kernel requires atags to be located in a direct-mapped region,
+ * usually below the kernel in the first 16 kB of RAM.  If they're above
+ * (the start of) the kernel, they need to be copied to a suitable
+ * location, e.g., the machine-defined params_phys.
+ *
+ * The assumption is that the tags will only be "out of place" if the
+ * decompressor code is also, so copying is implemented only in the "won't
+ * overwrite" case (which should be fixed).  Still need to make sure that
+ * the copied tags don't overwrite either the kernel or decompressor code
+ * (or rather, the remainder of it since everything up to here has already
+ * been executed).
+ *
+ * Vojtech Bocek <vbocek@gmail.com>: I've moved atags copying from guest
+ * kernel to the host and rewrote it from C to assembler in order to remove
+ * the need for guest kernel to be patched. I don't know assembler very well,
+ * so it doesn't look very good and I have no idea if I didn't accidentally
+ * break something, causing problems down the road. It's worked every time
+ * and I didn't notice any problems so far though.
+ *
+ * r4: zreladdr (kernel start)
+ * r8: kexec_boot_atags
+ * r2: boot_atags */
+		ldr	r8, [r3, #12]			@ kexec_boot_atags (r2: boot_atags)
+		ldr	r4, =zreladdr			@ zreladdr
+
+		/* No need to copy atags if they're already below kernel */
+		cmp	r8, r4
+		blo	no_atags_cpy
+
+		/* r0: min(zreladdr, pc) */
+		mov	r0, pc
+		cmp	r4, r0
+		movlo	r0, r4
+
+		/* Compute max space for atags, if max <= 0 don't copy. */
+		subs	r5, r0, r2			@ max = min(zreladdr, pc) - dest
+		bls	no_atags_cpy
+
+		/* Copy atags to params_phys. */
+		/* r8 src, r2 dest, r5 max */
+
+		ldr	r0, [r8]				@ first tag size
+		cmp	r0, #0
+		moveq	r4, #8
+		beq	catags_empty
+		mov	r4, r8
+
+catags_foreach:
+		lsl	r0, r0, #2				@ Multiply by 4
+		ldr	r0, [r4, r0]!			@ Load next tag size to r0 and address to r4
+		cmp	r0, #0
+		bne	catags_foreach
+
+		rsb	r4, r8, r4				@ r4 -= r8 (get only size)
+		add	r4, r4, #8				@ add size of the last tag
+catags_empty:
+		cmp	r5, r4					@ if(max <= size)
+		bcc	no_atags_cpy
+
+		mov	r5, #0					@ iterator
+catags_cpy:
+		ldr	r0, [r8, r5]
+		str	r0, [r2, r5]
+		add	r5, r5, #4
+		cmp	r5, r4
+		blo	catags_cpy
+
+no_atags_cpy:
+		/* Load boot arguments and jump to kexec kernel. */
+		ldr	r1, [r3, #8]			@ kexec_mach_type
+		ldr	pc, [r3, #4]			@ kexec_start_address
+
+		.ltorg
+
+not_booting_other:
+#endif
 
 #ifndef __ARM_ARCH_2__
 		/*
@@ -510,6 +606,7 @@ cache_on:	mov	r3, #8			@ cache_on function
  * to cover all 32bit address and cacheable and bufferable.
  */
 __armv4_mpu_cache_on:
+		.arch armv4
 		mov	r0, #0x3f		@ 4G, the whole
 		mcr	p15, 0, r0, c6, c7, 0	@ PR7 Area Setting
 		mcr 	p15, 0, r0, c6, c7, 1
@@ -614,13 +711,24 @@ __setup_mmu:	sub	r3, r4, #16384		@ Page directory size
 		mov	pc, lr
 ENDPROC(__setup_mmu)
 
+@ Enable unaligned access on v6, to allow better code generation
+@ for the decompressor C code:
+__armv6_mmu_cache_on:
+		mrc	p15, 0, r0, c1, c0, 0	@ read SCTLR
+		bic	r0, r0, #2		@ A (no unaligned access fault)
+		orr	r0, r0, #1 << 22	@ U (v6 unaligned access model)
+		mcr	p15, 0, r0, c1, c0, 0	@ write SCTLR
+		b	__armv4_mmu_cache_on
+
 __arm926ejs_mmu_cache_on:
 #ifdef CONFIG_CPU_DCACHE_WRITETHROUGH
+		.arch armv5
 		mov	r0, #4			@ put dcache in WT mode
 		mcr	p15, 7, r0, c15, c0, 0
 #endif
 
 __armv4_mmu_cache_on:
+		.arch armv4
 		mov	r12, lr
 #ifdef CONFIG_MMU
 		mov	r6, #CB_BITS | 0x12	@ U
@@ -641,6 +749,7 @@ __armv4_mmu_cache_on:
 		mov	pc, r12
 
 __armv7_mmu_cache_on:
+		.arch armv7-a
 		mov	r12, lr
 #ifdef CONFIG_MMU
 		mrc	p15, 0, r11, c0, c1, 4	@ read ID_MMFR0
@@ -656,6 +765,9 @@ __armv7_mmu_cache_on:
 		bic	r0, r0, #1 << 28	@ clear SCTLR.TRE
 		orr	r0, r0, #0x5000		@ I-cache enable, RR cache replacement
 		orr	r0, r0, #0x003c		@ write buffer
+		bic	r0, r0, #2		@ A (no unaligned access fault)
+		orr	r0, r0, #1 << 22	@ U (v6 unaligned access model)
+						@ (needed for ARM1176)
 #ifdef CONFIG_MMU
 #ifdef CONFIG_CPU_ENDIAN_BE8
 		orr	r0, r0, #1 << 25	@ big-endian page tables
@@ -688,6 +800,7 @@ __fa526_cache_on:
 		mov	pc, r12
 
 __arm6_mmu_cache_on:
+		.arch armv6
 		mov	r12, lr
 		mov	r6, #CB_BITS | 0x12	@ U
 		bl	__setup_mmu
@@ -896,7 +1009,7 @@ proc_types:
 
 		.word	0x0007b000		@ ARMv6
 		.word	0x000ff000
-		W(b)	__armv4_mmu_cache_on
+		W(b)	__armv6_mmu_cache_on
 		W(b)	__armv4_mmu_cache_off
 		W(b)	__armv6_mmu_cache_flush
 
@@ -1016,6 +1129,7 @@ cache_clean_flush:
 		mov	r3, #16
 		b	call_cache_fn
 
+		.arch armv4
 __armv4_mpu_cache_flush:
 		mov	r2, #1
 		mov	r3, #0
@@ -1041,6 +1155,7 @@ __fa526_cache_flush:
 		mov	pc, lr
 
 __armv6_mmu_cache_flush:
+		.arch armv6
 		mov	r1, #0
 		mcr	p15, 0, r1, c7, c14, 0	@ clean+invalidate D
 		mcr	p15, 0, r1, c7, c5, 0	@ invalidate I+BTB
@@ -1048,6 +1163,7 @@ __armv6_mmu_cache_flush:
 		mcr	p15, 0, r1, c7, c10, 4	@ drain WB
 		mov	pc, lr
 
+		.arch armv7-a
 __armv7_mmu_cache_flush:
 		mrc	p15, 0, r10, c0, c1, 5	@ read ID_MMFR1
 		tst	r10, #0xf << 16		@ hierarchical cache (ARMv7)
@@ -1108,6 +1224,7 @@ iflush:
 		mcr	p15, 0, r10, c7, c5, 4	@ ISB
 		mov	pc, lr
 
+		.arch armv5
 __armv5tej_mmu_cache_flush:
 1:		mrc	p15, 0, r15, c7, c14, 3	@ test,clean,invalidate D cache
 		bne	1b
@@ -1115,6 +1232,7 @@ __armv5tej_mmu_cache_flush:
 		mcr	p15, 0, r0, c7, c10, 4	@ drain WB
 		mov	pc, lr
 
+		.arch armv4
 __armv4_mmu_cache_flush:
 		mov	r2, #64*1024		@ default: 32K dcache size (*2)
 		mov	r11, #32		@ default: 32 byte line size
@@ -1152,6 +1270,8 @@ __armv3_mpu_cache_flush:
 		mov	r1, #0
 		mcr	p15, 0, r1, c7, c0, 0	@ invalidate whole cache v3
 		mov	pc, lr
+
+		.arch armv4
 
 /*
  * Various debugging routines for printing hex characters and

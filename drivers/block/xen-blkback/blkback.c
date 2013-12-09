@@ -401,11 +401,17 @@ static int dispatch_discard_io(struct xen_blkif *blkif,
 	unsigned long secure;
 	struct phys_req preq;
 
+<<<<<<< HEAD
 	xen_blkif_get(blkif);
 
 	preq.sector_number = req->u.discard.sector_number;
 	preq.nr_sects      = req->u.discard.nr_sectors;
 
+=======
+	preq.sector_number = req->u.discard.sector_number;
+	preq.nr_sects      = req->u.discard.nr_sectors;
+
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 	err = xen_vbd_translate(&preq, blkif, WRITE);
 	if (err) {
 		pr_warn(DRV_PFX "access denied: DISCARD [%llu->%llu] on dev=%04x\n",

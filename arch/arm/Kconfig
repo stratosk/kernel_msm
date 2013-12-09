@@ -20,6 +20,7 @@ config ARM
 	select HAVE_DYNAMIC_FTRACE if (!XIP_KERNEL)
 	select HAVE_FUNCTION_GRAPH_TRACER if (!THUMB2_KERNEL)
 	select ARCH_BINFMT_ELF_RANDOMIZE_PIE
+	select HAVE_EFFICIENT_UNALIGNED_ACCESS
 	select HAVE_GENERIC_DMA_COHERENT
 	select HAVE_KERNEL_GZIP
 	select HAVE_KERNEL_LZO
@@ -34,8 +35,12 @@ config ARM
 	select HAVE_GENERIC_HARDIRQS
 	select GENERIC_IRQ_SHOW
 	select CPU_PM if (SUSPEND || CPU_IDLE)
+	select DCACHE_WORD_ACCESS if (CPU_V6 || CPU_V6K || CPU_V7) && !CPU_BIG_ENDIAN && MMU
 	select GENERIC_PCI_IOMAP
 	select HAVE_BPF_JIT if NET
+	select GENERIC_SMP_IDLE_THREAD
+	select GENERIC_STRNCPY_FROM_USER
+	select GENERIC_STRNLEN_USER
 	help
 	  The ARM series is a line of low-power-consumption RISC chip designs
 	  licensed by ARM Ltd and targeted at embedded applications and
@@ -160,10 +165,9 @@ config ARM_TICKET_LOCKS
 
 config RWSEM_GENERIC_SPINLOCK
 	bool
-	default y
 
 config RWSEM_XCHGADD_ALGORITHM
-	bool
+	def_bool y
 
 config ARCH_HAS_ILOG2_U32
 	bool
@@ -1593,6 +1597,7 @@ config ARM_CPU_TOPOLOGY
 config SCHED_MC
 	bool "Multi-core scheduler support"
 	depends on ARM_CPU_TOPOLOGY
+	default y
 	help
 	  Multi-core scheduler support improves the CPU scheduler's decision
 	  making when dealing with multi-core CPU chips at a cost of slightly
@@ -1601,6 +1606,7 @@ config SCHED_MC
 config SCHED_SMT
 	bool "SMT scheduler support"
 	depends on ARM_CPU_TOPOLOGY
+	default y
 	help
 	  Improves the CPU scheduler's decision making when dealing with
 	  MultiThreading at a cost of slightly increased overhead in some
@@ -2190,6 +2196,32 @@ config ATAGS_PROC
 	help
 	  Should the atags used to boot the kernel be exported in an "atags"
 	  file in procfs. Useful with kexec.
+
+config KEXEC_HARDBOOT
+	bool "Support hard booting to a kexec kernel"
+	depends on KEXEC
+	help
+	  Allows hard booting (i.e., with a full hardware reboot) to a kernel
+	  previously loaded in memory by kexec.  This works around the problem of
+	  soft-booted kernel hangs due to improper device shutdown and/or
+	  reinitialization.  Support is comprised of two components:
+
+	  First, a "hardboot" flag is added to the kexec syscall to force a hard
+	  reboot in relocate_new_kernel() (which requires machine-specific assembly
+	  code).  This also requires the kexec userspace tool to load the kexec'd
+	  kernel in memory region left untouched by the bootloader (i.e., not
+	  explicitly cleared and not overwritten by the boot kernel).  Just prior
+	  to reboot, the kexec kernel arguments are stashed in a machine-specific
+	  memory page that must also be preserved.  Note that this hardboot page
+	  need not be reserved during regular kernel execution.
+
+	  Second, the zImage decompresor of the boot (bootloader-loaded) kernel is
+	  modified to check the hardboot page for fresh kexec arguments, and if
+	  present, attempts to jump to the kexec'd kernel preserved in memory.
+
+	  Note that hardboot support is only required in the boot kernel and any
+	  kernel capable of performing a hardboot kexec.  It is _not_ required by a
+	  kexec'd kernel.
 
 config CRASH_DUMP
 	bool "Build kdump crash kernel (EXPERIMENTAL)"

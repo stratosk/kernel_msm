@@ -4979,7 +4979,11 @@ void ftrace_dump(enum ftrace_dump_mode oops_dump_mode)
 	for_each_tracing_cpu(cpu) {
 		atomic_dec(&iter.tr->data[cpu]->disabled);
 	}
+<<<<<<< HEAD
  	atomic_dec(&dump_running);
+=======
+   atomic_dec(&dump_running);
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 	local_irq_restore(flags);
 }
 EXPORT_SYMBOL_GPL(ftrace_dump);

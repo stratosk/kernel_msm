@@ -30,9 +30,16 @@
 #include <linux/time.h>
 #include <linux/version.h>
 #include <linux/atomic.h>
+#include <linux/cpufreq.h>
+#include <linux/pm.h>
+#include <linux/pm_runtime.h>
+
 #include <linux/gpio.h>
 
 #include <linux/input/lge_touch_core.h>
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+#include <linux/input/sweep2wake.h>
+#endif
 
 #ifdef CONFIG_TOUCH_WAKE
 #include <linux/touch_wake.h>
@@ -48,10 +55,19 @@ struct lge_touch_attribute {
 				const char *buf, size_t count);
 };
 
+<<<<<<< HEAD
 #ifdef CONFIG_TOUCH_WAKE
 static struct lge_touch_data *touchwake_data;
 static unsigned suspending = 0;
 #endif
+=======
+struct touch_control_attribute {
+	struct attribute attr;
+	ssize_t (*show)(struct lge_touch_data *ts, char *buf);
+	ssize_t (*store)(struct lge_touch_data *ts,
+				const char *buf, size_t count);
+};
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 
 static int is_pressure;
 static int is_width_major;
@@ -61,17 +77,21 @@ static int is_width_minor;
 	struct lge_touch_attribute lge_touch_attr_##_name =       \
 	__ATTR(_name, _mode, _show, _store)
 
+#define TOUCH_CONTROL_ATTR(_name, _mode, _show, _store)               \
+	struct touch_control_attribute touch_control_attr_##_name =       \
+	__ATTR(_name, _mode, _show, _store)
+
 /* Debug mask value
  * usage: echo [debug_mask] > /sys/module/lge_touch_core/parameters/debug_mask
  */
-u32 touch_debug_mask = DEBUG_BASE_INFO;
+u32 touch_debug_mask = 0;
 module_param_named(debug_mask, touch_debug_mask, int, S_IRUGO|S_IWUSR|S_IWGRP);
 
 #ifdef LGE_TOUCH_TIME_DEBUG
 /* Debug mask value
  * usage: echo [debug_mask] > /sys/module/lge_touch_core/parameters/time_debug_mask
  */
-u32 touch_time_debug_mask = DEBUG_TIME_PROFILE_NONE;
+u32 touch_time_debug_mask = 0;
 module_param_named(time_debug_mask, touch_time_debug_mask, int, S_IRUGO|S_IWUSR|S_IWGRP);
 
 #define get_time_interval(a,b) ((a)>=(b) ? (a)-(b) : 1000000+(a)-(b))
@@ -91,6 +111,11 @@ struct pointer_trace {
 static struct pointer_trace tr_data[MAX_TRACE];
 static int tr_last_index;
 #endif
+
+#define BOOSTED_TIME	1000	/* ms */
+int lge_boosted;
+static unsigned int boosted_time = BOOSTED_TIME;
+static struct timer_list boost_timer;
 
 #if defined(CONFIG_HAS_EARLYSUSPEND)
 static void touch_early_suspend(struct early_suspend *h);
@@ -136,8 +161,12 @@ int touch_i2c_read(struct i2c_client *client, u8 reg, int len, u8 *buf)
 	};
 
 	if (i2c_transfer(client->adapter, msgs, 2) < 0) {
-		if (printk_ratelimit())
-			TOUCH_ERR_MSG("transfer error\n");
+		if (printk_ratelimit()) {
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+			if (!scr_suspended || retry_cnt > 1)
+#endif
+				TOUCH_ERR_MSG("transfer error\n");
+		}
 		return -EIO;
 	} else {
 		return 0;
@@ -782,6 +811,12 @@ static void touch_input_report(struct lge_touch_data *ts)
 				input_report_abs(ts->input_dev,
 					ABS_MT_TOUCH_MINOR,
 					ts->ts_data.curr_data[id].width_minor);
+
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+                        detect_sweep2wake(ts->ts_data.curr_data[id].x_position,
+				ts->ts_data.curr_data[id].y_position, ts);
+#endif
+
 #ifdef LGE_TOUCH_POINT_DEBUG
 			if (id == 0 && tr_last_index < MAX_TRACE) {
 				tr_data[tr_last_index].x = ts->ts_data.curr_data[id].x_position;
@@ -792,6 +827,13 @@ static void touch_input_report(struct lge_touch_data *ts)
 		}
 		else {
 			ts->ts_data.curr_data[id].state = 0;
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+                        if (s2w_switch) {
+                                exec_count = true;
+                                barrier[0] = false;
+                                barrier[1] = false;
+                        }
+#endif
 #ifdef LGE_TOUCH_POINT_DEBUG
 			dump_pointer_trace();
 #endif
@@ -799,6 +841,24 @@ static void touch_input_report(struct lge_touch_data *ts)
 	}
 
 	input_sync(ts->input_dev);
+}
+
+static void lge_touch_boost(void)
+{
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+	if (scr_suspended)
+		return;
+#endif
+
+	if (boosted_time) {
+		lge_boosted = 1;
+		mod_timer(&boost_timer, jiffies + msecs_to_jiffies(boosted_time));
+	}
+}
+
+static void handle_boost(unsigned long data)
+{
+	lge_boosted = 0;
 }
 
 /*
@@ -815,6 +875,8 @@ static void touch_work_func(struct work_struct *work)
 	atomic_dec(&ts->next_work);
 	ts->ts_data.total_num = 0;
 
+	lge_touch_boost();
+
 	if (unlikely(ts->work_sync_err_cnt >= MAX_RETRY_COUNT)) {
 		TOUCH_ERR_MSG("Work Sync Failed: Irq-pin has some unknown problems\n");
 		goto err_out_critical;
@@ -829,8 +891,12 @@ static void touch_work_func(struct work_struct *work)
 	ret = touch_device_func->data(ts->client, ts->ts_data.curr_data,
 		&ts->ts_data.curr_button, &ts->ts_data.total_num);
 	if (ret < 0) {
-		if (ret == -EINVAL) /* Ignore the error */
-			return;
+		if (ret == -EINVAL) { /* Ignore the error */
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+			if (!scr_suspended)
+#endif
+				return;
+		}
 		goto err_out_critical;
 	}
 
@@ -882,6 +948,12 @@ out:
 	return;
 
 err_out_retry:
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+        if (scr_suspended) {
+		s2w_error = true;
+		return;
+	}
+#endif
 	ts->work_sync_err_cnt++;
 	atomic_inc(&ts->next_work);
 	queue_work(touch_wq, &ts->work);
@@ -889,6 +961,12 @@ err_out_retry:
 	return;
 
 err_out_critical:
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+        if (scr_suspended) {
+		s2w_error = true;
+		return;
+	}
+#endif
 	ts->work_sync_err_cnt = 0;
 	safety_reset(ts);
 	touch_ic_init(ts);
@@ -961,7 +1039,10 @@ static void touch_fw_upgrade_func(struct work_struct *work_fw_upgrade)
 #endif
 
 	if (!ts->curr_resume_state) {
-		touch_power_cntl(ts, POWER_OFF);
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+                if (!s2w_switch)
+#endif
+                        touch_power_cntl(ts, POWER_OFF);
 	}
 	else {
 		if (ts->pdata->role->operation_mode == INTERRUPT_MODE)
@@ -974,7 +1055,11 @@ static void touch_fw_upgrade_func(struct work_struct *work_fw_upgrade)
 		touch_ic_init(ts);
 
 		if (saved_state == POWER_WAKE || saved_state == POWER_SLEEP)
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+                        touch_power_cntl(ts, POWER_ON);
+#else
 			touch_power_cntl(ts, saved_state);
+#endif
 	}
 
 	if (likely(touch_debug_mask & (DEBUG_FW_UPGRADE |DEBUG_BASE_INFO)))
@@ -1253,6 +1338,8 @@ static ssize_t show_platform_data(struct lge_touch_data *ts, char *buf)
 			pdata->role->show_touches);
 	ret += sprintf(buf+ret, "\tpointer_location      = %d\n",
 			pdata->role->pointer_location);
+	ret += sprintf(buf+ret, "\taccuracy_filter_enable = %d\n",
+			pdata->role->accuracy_filter_enable);
 	ret += sprintf(buf+ret, "pwr:\n");
 	ret += sprintf(buf+ret, "\tuse_regulator         = %d\n",
 			pdata->pwr->use_regulator);
@@ -1617,6 +1704,141 @@ static ssize_t show_charger(struct lge_touch_data *ts, char *buf)
 	return sprintf(buf, "%d\n", ts->charger_type);
 }
 
+static ssize_t show_boosted_time(struct lge_touch_data *ts, char *buf)
+{
+	int ret = 0;
+
+	ret = sprintf(buf, "%d\n", boosted_time);
+
+	return ret;
+}
+
+static ssize_t store_boosted_time(struct lge_touch_data *ts, const char *buf,
+			     size_t count)
+{
+	unsigned int value;
+
+	sscanf(buf, "%d", &value);
+
+	boosted_time = value;
+
+	return count;
+}
+
+/*
+ * Lets tweak the accuracy filter:
+ *
+ *  @ignore_pressure_gap;
+ *  @touch_max_count;
+ *  @delta_max;
+ *  @max_pressure;
+ *  @direction_count;
+ *  @time_to_max_pressure;
+ *
+ */
+
+//ignore_pressure_gap
+static ssize_t store_ignore_pressure_gap(struct lge_touch_data *ts, const char *buf, size_t count)
+{
+	unsigned int val;
+
+	sscanf(buf, "%d", &val);
+
+	ts->accuracy_filter.ignore_pressure_gap = val;
+
+	return count;
+}
+
+static ssize_t show_ignore_pressure_gap(struct lge_touch_data *ts, char *buf)
+{
+	return sprintf(buf, "%d\n", ts->accuracy_filter.ignore_pressure_gap);
+}
+
+//touch_max_count
+static ssize_t store_touch_max_count(struct lge_touch_data *ts, const char *buf, size_t count)
+{
+	unsigned int val;
+
+	sscanf(buf, "%d", &val);
+
+	ts->accuracy_filter.touch_max_count = val;
+
+	return count;
+}
+
+static ssize_t show_touch_max_count(struct lge_touch_data *ts, char *buf)
+{
+	return sprintf(buf, "%d\n", ts->accuracy_filter.touch_max_count);
+}
+
+//delta_max
+static ssize_t store_delta_max(struct lge_touch_data *ts, const char *buf, size_t count)
+{
+	unsigned int val;
+
+	sscanf(buf, "%d", &val);
+
+	ts->accuracy_filter.delta_max = val;
+
+	return count;
+}
+
+static ssize_t show_delta_max(struct lge_touch_data *ts, char *buf)
+{
+	return sprintf(buf, "%d\n", ts->accuracy_filter.delta_max);
+}
+
+//max_pressure
+static ssize_t store_max_pressure(struct lge_touch_data *ts, const char *buf, size_t count)
+{
+	unsigned int val;
+
+	sscanf(buf, "%d", &val);
+
+	ts->accuracy_filter.max_pressure = val;
+
+	return count;
+}
+
+static ssize_t show_max_pressure(struct lge_touch_data *ts, char *buf)
+{
+	return sprintf(buf, "%d\n", ts->accuracy_filter.max_pressure);
+}
+
+//direction_count
+static ssize_t store_direction_count(struct lge_touch_data *ts, const char *buf, size_t count)
+{
+	unsigned int val;
+
+	sscanf(buf, "%d", &val);
+
+	ts->accuracy_filter.direction_count = val;
+
+	return count;
+}
+
+static ssize_t show_direction_count(struct lge_touch_data *ts, char *buf)
+{
+	return sprintf(buf, "%d\n", ts->accuracy_filter.direction_count);
+}
+
+//time_to_max_pressure
+static ssize_t store_time_to_max_pressure(struct lge_touch_data *ts, const char *buf, size_t count)
+{
+	unsigned int val;
+
+	sscanf(buf, "%d", &val);
+
+	ts->accuracy_filter.time_to_max_pressure = val;
+
+	return count;
+}
+
+static ssize_t show_time_to_max_pressure(struct lge_touch_data *ts, char *buf)
+{
+	return sprintf(buf, "%d\n", ts->accuracy_filter.time_to_max_pressure);
+}
+
 static LGE_TOUCH_ATTR(platform_data, S_IRUGO | S_IWUSR, show_platform_data, NULL);
 static LGE_TOUCH_ATTR(firmware, S_IRUGO | S_IWUSR, show_fw_info, store_fw_upgrade);
 static LGE_TOUCH_ATTR(fw_ver, S_IRUGO | S_IWUSR, show_fw_ver, NULL);
@@ -1630,6 +1852,14 @@ static LGE_TOUCH_ATTR(show_touches, S_IRUGO | S_IWUSR, show_show_touches, store_
 static LGE_TOUCH_ATTR(pointer_location, S_IRUGO | S_IWUSR, show_pointer_location,
 					store_pointer_location);
 static LGE_TOUCH_ATTR(charger, S_IRUGO | S_IWUSR, show_charger, NULL);
+static LGE_TOUCH_ATTR(boost_time, S_IRUGO | S_IWUSR, show_boosted_time, store_boosted_time);
+
+static LGE_TOUCH_ATTR(ignore_pressure_gap, S_IRUGO | S_IWUSR, show_ignore_pressure_gap, store_ignore_pressure_gap);
+static LGE_TOUCH_ATTR(touch_max_count, S_IRUGO | S_IWUSR, show_touch_max_count, store_touch_max_count);
+static LGE_TOUCH_ATTR(delta_max, S_IRUGO | S_IWUSR, show_delta_max, store_delta_max);
+static LGE_TOUCH_ATTR(max_pressure, S_IRUGO | S_IWUSR, show_max_pressure, store_max_pressure);
+static LGE_TOUCH_ATTR(direction_count, S_IRUGO | S_IWUSR, show_direction_count, store_direction_count);
+static LGE_TOUCH_ATTR(time_to_max_pressure, S_IRUGO | S_IWUSR, show_time_to_max_pressure, store_time_to_max_pressure);
 
 static struct attribute *lge_touch_attribute_list[] = {
 	&lge_touch_attr_platform_data.attr,
@@ -1642,6 +1872,13 @@ static struct attribute *lge_touch_attribute_list[] = {
 	&lge_touch_attr_show_touches.attr,
 	&lge_touch_attr_pointer_location.attr,
 	&lge_touch_attr_charger.attr,
+	&lge_touch_attr_boost_time.attr,
+	&lge_touch_attr_ignore_pressure_gap.attr,
+	&lge_touch_attr_touch_max_count.attr,
+	&lge_touch_attr_delta_max.attr,
+	&lge_touch_attr_max_pressure.attr,
+	&lge_touch_attr_direction_count.attr,
+	&lge_touch_attr_time_to_max_pressure.attr,
 	NULL,
 };
 
@@ -1772,6 +2009,59 @@ static void touch_psy_init(struct lge_touch_data *ts)
 }
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+static ssize_t lge_touch_sweep2wake_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", s2w_switch ? 1 : 0);
+}
+
+static ssize_t lge_touch_sweep2wake_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	unsigned int value;
+
+	sscanf(buf, "%d", &value);
+
+	s2w_switch = value ? 1 : 0;
+
+	return count;
+}
+
+static DEVICE_ATTR(sweep2wake, (S_IWUSR|S_IRUGO),
+	lge_touch_sweep2wake_show, lge_touch_sweep2wake_store);
+#endif
+
+static struct kobject *android_touch_kobj;
+
+static int lge_touch_sysfs_init(void)
+{
+	int ret ;
+
+	android_touch_kobj = kobject_create_and_add("android_touch", NULL) ;
+	if (android_touch_kobj == NULL) {
+		pr_debug("[lge_touch]%s: subsystem_register failed\n", __func__);
+		ret = -ENOMEM;
+		return ret;
+	}
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+	ret = sysfs_create_file(android_touch_kobj, &dev_attr_sweep2wake.attr);
+	if (ret) {
+		printk(KERN_ERR "%s: sysfs_create_file failed\n", __func__);
+		return ret;
+	}
+#endif
+	return 0 ;
+}
+
+static void lge_touch_sysfs_deinit(void)
+{
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+	sysfs_remove_file(android_touch_kobj, &dev_attr_sweep2wake.attr);
+#endif
+	kobject_del(android_touch_kobj);
+}
+
 static int touch_probe(struct i2c_client *client,
 				const struct i2c_device_id *id)
 {
@@ -1794,6 +2084,12 @@ static int touch_probe(struct i2c_client *client,
 		ret = -ENOMEM;
 		goto err_alloc_data_failed;
 	}
+
+	/* Enable runtime PM ops, start in ACTIVE mode */
+	ret = pm_runtime_set_active(&client->dev);
+	if (ret < 0)
+		dev_dbg(&client->dev, "unable to set runtime pm state\n");
+	pm_runtime_enable(&client->dev);
 
 	ts->pdata = client->dev.platform_data;
 	ret = check_platform_data(ts->pdata);
@@ -1919,8 +2215,12 @@ static int touch_probe(struct i2c_client *client,
 
 		ret = request_threaded_irq(client->irq, touch_irq_handler,
 				NULL,
-				ts->pdata->role->irqflags | IRQF_ONESHOT,
-				client->name, ts);
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+		ts->pdata->role->irqflags | IRQF_ONESHOT | IRQF_TRIGGER_LOW | IRQF_NO_SUSPEND,
+#else
+		ts->pdata->role->irqflags | IRQF_ONESHOT,
+#endif
+			client->name, ts);
 
 		if (ret < 0) {
 			TOUCH_ERR_MSG("request_irq failed. use polling mode\n");
@@ -1947,12 +2247,26 @@ static int touch_probe(struct i2c_client *client,
 	ts->jitter_filter.adjust_margin = 100;
 
 	/* accuracy solution */
+<<<<<<< HEAD
 	ts->accuracy_filter.ignore_pressure_gap = 5;
 	ts->accuracy_filter.delta_max = 100;
 	ts->accuracy_filter.max_pressure = 255;
 	ts->accuracy_filter.time_to_max_pressure = one_sec / 20;
 	ts->accuracy_filter.direction_count = one_sec / 6;
 	ts->accuracy_filter.touch_max_count = one_sec / 2;
+=======
+	if (ts->pdata->role->accuracy_filter_enable) {
+		ts->accuracy_filter.ignore_pressure_gap = 5;
+		ts->accuracy_filter.delta_max = 50;
+		ts->accuracy_filter.max_pressure = 55;
+		ts->accuracy_filter.time_to_max_pressure = 1;
+		ts->accuracy_filter.direction_count = 8;
+		ts->accuracy_filter.touch_max_count = 4;
+	}
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
+
+        device_init_wakeup(&client->dev, true);
+	setup_timer(&boost_timer, handle_boost, 0);
 
 #if defined(CONFIG_HAS_EARLYSUSPEND)
 	ts->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
@@ -1961,9 +2275,13 @@ static int touch_probe(struct i2c_client *client,
 	register_early_suspend(&ts->early_suspend);
 #endif
 
+<<<<<<< HEAD
 #ifdef CONFIG_TOUCH_WAKE
 	touchwake_data = ts;
 #endif
+=======
+        lge_touch_sysfs_init();
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 
 	/* Register sysfs for making fixed communication path to framework layer */
 	ret = sysdev_class_register(&lge_touch_sys_class);
@@ -2014,6 +2332,8 @@ err_input_dev_alloc_failed:
 err_power_failed:
 err_assign_platform_data:
 	kfree(ts);
+	pm_runtime_set_suspended(&client->dev);
+	pm_runtime_disable(&client->dev);
 err_alloc_data_failed:
 err_check_functionality_failed:
 	return ret;
@@ -2039,6 +2359,13 @@ static int touch_remove(struct i2c_client *client)
 
 	unregister_early_suspend(&ts->early_suspend);
 
+        lge_touch_sysfs_deinit();
+
+	pm_runtime_set_suspended(&client->dev);
+	pm_runtime_disable(&client->dev);
+
+	device_init_wakeup(&client->dev, 0);
+
 	if (ts->pdata->role->operation_mode == INTERRUPT_MODE) {
 		gpio_free(ts->pdata->int_pin);
 		free_irq(client->irq, ts);
@@ -2047,6 +2374,7 @@ static int touch_remove(struct i2c_client *client)
 		hrtimer_cancel(&ts->timer);
 	}
 
+	del_timer(&boost_timer);
 	input_unregister_device(ts->input_dev);
 	input_free_device(ts->input_dev);
 	kfree(ts);
@@ -2082,8 +2410,15 @@ static void touch_power_on(struct lge_touch_data *ts)
 		queue_delayed_work(touch_wq, &ts->work_init, 0);
 }
 
+<<<<<<< HEAD
 static void touch_power_off(struct lge_touch_data *ts)
 {
+=======
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+        scr_suspended = true;
+#endif
+
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 	if (unlikely(touch_debug_mask & DEBUG_TRACE))
 		TOUCH_DEBUG_MSG("\n");
 
@@ -2094,19 +2429,28 @@ static void touch_power_off(struct lge_touch_data *ts)
 		return;
 	}
 
-	if (ts->pdata->role->operation_mode == INTERRUPT_MODE)
-		disable_irq(ts->client->irq);
-	else
-		hrtimer_cancel(&ts->timer);
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+        if (!s2w_switch) {
+#endif
+	        if (ts->pdata->role->operation_mode == INTERRUPT_MODE)
+		                disable_irq(ts->client->irq);
+	        else
+		        hrtimer_cancel(&ts->timer);
 
-	cancel_work_sync(&ts->work);
-	cancel_delayed_work_sync(&ts->work_init);
-	if (ts->pdata->role->key_type == TOUCH_HARD_KEY)
-		cancel_delayed_work_sync(&ts->work_touch_lock);
+	        cancel_work_sync(&ts->work);
+	        cancel_delayed_work_sync(&ts->work_init);
+	        if (ts->pdata->role->key_type == TOUCH_HARD_KEY)
+		        cancel_delayed_work_sync(&ts->work_touch_lock);
 
-	release_all_ts_event(ts);
+	        release_all_ts_event(ts);
 
-	touch_power_cntl(ts, ts->pdata->role->suspend_pwr);
+	        touch_power_cntl(ts, ts->pdata->role->suspend_pwr);
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+        } else {
+                enable_irq_wake(ts->client->irq);
+		release_all_ts_event(ts);
+	}
+#endif
 }
 
 #if defined(CONFIG_HAS_EARLYSUSPEND)
@@ -2115,6 +2459,7 @@ static void touch_early_suspend(struct early_suspend *h)
 	struct lge_touch_data *ts =
 			container_of(h, struct lge_touch_data, early_suspend);
 
+<<<<<<< HEAD
 #ifdef CONFIG_TOUCH_WAKE
 	if (touchwake_is_enabled())
 		return;	/* touchwake will handle touchscreen suspend call */
@@ -2122,6 +2467,14 @@ static void touch_early_suspend(struct early_suspend *h)
 	/* touchwake is not compiled or it's disabled - handle suspend */
 	touch_power_off(ts);
 }
+=======
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+        scr_suspended = false;
+#endif
+
+	if (unlikely(touch_debug_mask & DEBUG_TRACE))
+		TOUCH_DEBUG_MSG("\n");
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 
 static void touch_late_resume(struct early_suspend *h)
 {
@@ -2131,6 +2484,7 @@ static void touch_late_resume(struct early_suspend *h)
 #ifdef CONFIG_TOUCH_WAKE
 	if (touchwake_is_enabled())
 		return;
+<<<<<<< HEAD
 #endif
 	/* touchwake is not compiled or it's disabled - handle wake */
 	touch_power_on(ts);
@@ -2149,6 +2503,38 @@ EXPORT_SYMBOL(touchscreen_disable);
 void touchscreen_enable(void)
 {
 	touch_power_on(touchwake_data);
+=======
+	}
+
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+        if (!s2w_switch) {
+#endif
+	        touch_power_cntl(ts, ts->pdata->role->resume_pwr);
+
+	        if (ts->pdata->role->operation_mode == INTERRUPT_MODE)
+		        enable_irq(ts->client->irq);
+	        else
+		        hrtimer_start(&ts->timer,
+			        ktime_set(0, ts->pdata->role->report_period),
+					        HRTIMER_MODE_REL);
+
+	        if (ts->pdata->role->resume_pwr == POWER_ON)
+		        queue_delayed_work(touch_wq, &ts->work_init,
+			        msecs_to_jiffies(ts->pdata->role->booting_delay));
+	        else
+		        queue_delayed_work(touch_wq, &ts->work_init, 0);
+
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+	} else {
+                disable_irq_wake(ts->client->irq);
+		if (s2w_error) {
+			s2w_error = false;
+			TOUCH_ERR_MSG("soft resetting device\n");
+			store_ts_reset(ts, "soft", 0);
+		}
+	}
+#endif
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 }
 EXPORT_SYMBOL(touchscreen_enable);
 #endif
@@ -2204,7 +2590,7 @@ int touch_driver_register(struct touch_device_driver* driver)
 
 	touch_device_func = driver;
 
-	touch_wq = create_singlethread_workqueue("touch_wq");
+	touch_wq = create_workqueue("touch_wq");
 	if (!touch_wq) {
 		TOUCH_ERR_MSG("CANNOT create new workqueue\n");
 		ret = -ENOMEM;

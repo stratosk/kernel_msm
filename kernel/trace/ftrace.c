@@ -3918,11 +3918,19 @@ void __init ftrace_init(void)
 				  __stop_mcount_loc);
 
 	ret = register_module_notifier(&ftrace_module_enter_nb);
+<<<<<<< HEAD
 	if (ret)
 		pr_warning("Failed to register trace ftrace module enter notifier\n");
 
 	ret = register_module_notifier(&ftrace_module_exit_nb);
 	if (ret)
+=======
+	if (ret)
+		pr_warning("Failed to register trace ftrace module enter notifier\n");
+
+	ret = register_module_notifier(&ftrace_module_exit_nb);
+	if (ret)
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 		pr_warning("Failed to register trace ftrace module exit notifier\n");
 
 	set_ftrace_early_filters();
