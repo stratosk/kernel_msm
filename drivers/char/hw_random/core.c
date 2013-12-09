@@ -40,6 +40,10 @@
 #include <linux/init.h>
 #include <linux/miscdevice.h>
 #include <linux/delay.h>
+<<<<<<< HEAD
+=======
+#include <linux/random.h>
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 #include <linux/slab.h>
 #include <asm/uaccess.h>
 

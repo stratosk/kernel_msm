@@ -4414,10 +4414,11 @@ static void tcp_sack_remove(struct tcp_sock *tp)
 		return;
 	}
 
+	BUG_ON(num_sacks > 4); 
 	for (this_sack = 0; this_sack < num_sacks;) {
 		/* Check if the start of the sack is covered by RCV.NXT. */
 		if (!before(tp->rcv_nxt, sp->start_seq)) {
-			int i;
+			int i = 0;
 
 			/* RCV.NXT must cover all the block! */
 			WARN_ON(before(tp->rcv_nxt, sp->end_seq));
@@ -4537,7 +4538,9 @@ static void tcp_data_queue_ofo(struct sock *sk, struct sk_buff *skb)
 		 * to avoid future tcp_collapse_ofo_queue(),
 		 * probably the most expensive function in tcp stack.
 		 */
-		if (skb->len <= skb_tailroom(skb1) && !tcp_hdr(skb)->fin) {
+		if (skb->len <= skb_tailroom(skb1) &&
+		    !tcp_hdr(skb)->fin &&
+		    !skb_cloned(skb1)) {
 			NET_INC_STATS_BH(sock_net(sk),
 					 LINUX_MIB_TCPRCVCOALESCE);
 			BUG_ON(skb_copy_bits(skb, 0,

@@ -122,10 +122,10 @@ extern void get_avenrun(unsigned long *loads, unsigned long offset, int shift);
 
 #define FSHIFT		11		/* nr of bits of precision */
 #define FIXED_1		(1<<FSHIFT)	/* 1.0 as fixed-point */
-#define LOAD_FREQ	(5*HZ+1)	/* 5 sec intervals */
-#define EXP_1		1884		/* 1/exp(5sec/1min) as fixed-point */
-#define EXP_5		2014		/* 1/exp(5sec/5min) */
-#define EXP_15		2037		/* 1/exp(5sec/15min) */
+#define LOAD_FREQ	(4*HZ+61)	/* 5 sec intervals */
+#define EXP_1		1896		/* 1/exp(5sec/1min) as fixed-point */
+#define EXP_5		2017		/* 1/exp(5sec/5min) */
+#define EXP_15		2038		/* 1/exp(5sec/15min) */
 
 #define CALC_LOAD(load,exp,n) \
 	load *= exp; \
@@ -139,6 +139,7 @@ extern int nr_processes(void);
 extern unsigned long nr_running(void);
 extern unsigned long nr_uninterruptible(void);
 extern unsigned long nr_iowait(void);
+extern unsigned long avg_nr_running(void);
 extern unsigned long nr_iowait_cpu(int cpu);
 extern unsigned long this_cpu_load(void);
 
@@ -146,6 +147,7 @@ extern void sched_update_nr_prod(int cpu, unsigned long nr, bool inc);
 extern void sched_get_nr_running_avg(int *avg, int *iowait_avg);
 
 extern void calc_global_load(unsigned long ticks);
+extern void update_cpu_load_nohz(void);
 
 extern unsigned long get_parent_ip(unsigned long addr);
 
@@ -272,10 +274,28 @@ extern void init_idle_bootup_task(struct task_struct *idle);
 
 extern int runqueue_is_locked(int cpu);
 
+#ifdef CONFIG_SMP
+extern int sched_select_non_idle_cpu(void);
+#else
+static inline int sched_select_non_idle_cpu(void)
+{
+	return smp_processor_id();
+}
+#endif
+
 #if defined(CONFIG_SMP) && defined(CONFIG_NO_HZ)
 extern void select_nohz_load_balancer(int stop_tick);
 extern void set_cpu_sd_state_idle(void);
-extern int get_nohz_timer_target(void);
+
+/*
+ * In the semi idle case, use the nearest busy cpu for migrating timers
+ * from an idle cpu.  This is good for power-savings.
+ *
+ * We don't do similar optimization for completely idle system, as
+ * selecting an idle cpu will add more delays to the timers than intended
+ * (as that cpu's timer base may not be uptodate wrt jiffies etc).
+ */
+#define get_nohz_timer_target() sched_select_non_idle_cpu()
 #else
 static inline void select_nohz_load_balancer(int stop_tick) { }
 static inline void set_cpu_sd_state_idle(void) { }
@@ -867,6 +887,7 @@ enum cpu_idle_type {
 #define SD_ASYM_PACKING		0x0800  /* Place busy groups earlier in the domain */
 #define SD_PREFER_SIBLING	0x1000	/* Prefer to place tasks in a sibling domain */
 #define SD_OVERLAP		0x2000	/* sched_domains of this level overlap */
+#define SD_SHARE_POWERDOMAIN	0x4000  /* Domain members share power domain */
 
 enum powersavings_balance_level {
 	POWERSAVINGS_BALANCE_NONE = 0,  /* No power saving load balance */
@@ -996,6 +1017,10 @@ struct sched_domain {
 	unsigned int nr_balance_failed; /* initialise to 0 */
 
 	u64 last_update;
+
+	/* idle_balance() stats */
+	u64 max_newidle_lb_cost;
+	unsigned long next_decay_max_lb_cost;
 
 #ifdef CONFIG_SCHEDSTATS
 	/* load_balance() stats */
@@ -1140,6 +1165,7 @@ struct sched_class {
 
 #ifdef CONFIG_SMP
 	int  (*select_task_rq)(struct task_struct *p, int sd_flag, int flags);
+	void (*migrate_task_rq)(struct task_struct *p, int next_cpu);
 
 	void (*pre_schedule) (struct rq *this_rq, struct task_struct *task);
 	void (*post_schedule) (struct rq *this_rq);
@@ -1172,6 +1198,19 @@ struct sched_class {
 
 struct load_weight {
 	unsigned long weight, inv_weight;
+};
+
+struct sched_avg {
+	/*
+	 * These sums represent an infinite geometric series and so are bound
+	 * above by 1024/(1-y).  Thus we only need a u32 to store them for for all
+	 * choices of y < 1-2^(-32)*1024.
+	 */
+	u32 runnable_avg_sum, runnable_avg_period;
+	u64 last_runnable_update;
+	s64 decay_count;
+	unsigned long load_avg_contrib;
+	u32 usage_avg_sum;
 };
 
 #ifdef CONFIG_SCHEDSTATS
@@ -1234,6 +1273,9 @@ struct sched_entity {
 	/* rq "owned" by this entity/group: */
 	struct cfs_rq		*my_q;
 #endif
+#ifdef CONFIG_SMP
+	struct sched_avg	avg;
+#endif
 };
 
 struct sched_rt_entity {
@@ -1277,6 +1319,9 @@ struct task_struct {
 #ifdef CONFIG_SMP
 	struct llist_node wake_entry;
 	int on_cpu;
+	struct task_struct *last_wakee;
+	unsigned long wakee_flips;
+	unsigned long wakee_flip_decay_ts;
 #endif
 	int on_rq;
 
@@ -1828,6 +1873,7 @@ extern int task_free_unregister(struct notifier_block *n);
 #define PF_MEMALLOC	0x00000800	/* Allocating memory */
 #define PF_NPROC_EXCEEDED 0x00001000	/* set_user noticed that RLIMIT_NPROC was exceeded */
 #define PF_USED_MATH	0x00002000	/* if unset the fpu must be initialized before use */
+#define PF_WAKE_UP_IDLE 0x00004000	/* try to wake up on an idle CPU */
 #define PF_NOFREEZE	0x00008000	/* this thread should not be frozen */
 #define PF_FROZEN	0x00010000	/* frozen for system suspend */
 #define PF_FSTRANS	0x00020000	/* inside a filesystem transaction */
@@ -1954,6 +2000,17 @@ static inline void calc_load_enter_idle(void) { }
 static inline void calc_load_exit_idle(void) { }
 #endif /* CONFIG_NO_HZ */
 
+<<<<<<< HEAD
+=======
+static inline void set_wake_up_idle(bool enabled)
+{
+	if (enabled)
+		current->flags |= PF_WAKE_UP_IDLE;
+	else
+		current->flags &= ~PF_WAKE_UP_IDLE;
+}
+
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 #ifndef CONFIG_CPUMASK_OFFSTACK
 static inline int set_cpus_allowed(struct task_struct *p, cpumask_t new_mask)
 {
@@ -2048,6 +2105,7 @@ extern unsigned int sysctl_sched_latency;
 extern unsigned int sysctl_sched_min_granularity;
 extern unsigned int sysctl_sched_wakeup_granularity;
 extern unsigned int sysctl_sched_child_runs_first;
+extern unsigned int sysctl_sched_wake_to_idle;
 
 enum sched_tunable_scaling {
 	SCHED_TUNABLESCALING_NONE,
@@ -2841,5 +2899,15 @@ static inline unsigned long rlimit_max(unsigned int limit)
 }
 
 #endif /* __KERNEL__ */
+
+#ifdef CONFIG_CGROUP_TIMER_SLACK
+extern unsigned long task_get_effective_timer_slack(struct task_struct *tsk);
+#else
+static inline unsigned long task_get_effective_timer_slack(
+  		struct task_struct *tsk)
+{
+	return tsk->timer_slack_ns;
+}
+#endif
 
 #endif

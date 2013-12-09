@@ -345,7 +345,11 @@ bool rtl92cu_rx_query_desc(struct ieee80211_hw *hw,
 	if (phystatus) {
 		p_drvinfo = (struct rx_fwinfo_92c *)(skb->data +
 						     stats->rx_bufshift);
+<<<<<<< HEAD
 		rtl92c_translate_rx_signal_stuff(hw, skb, stats, p_desc,
+=======
+		rtl92c_translate_rx_signal_stuff(hw, skb, stats, pdesc,
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 						 p_drvinfo);
 	}
 	/*rx_status->qual = stats->signal; */

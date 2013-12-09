@@ -23,8 +23,13 @@
 #include <linux/mfd/pm8xxx/core.h>
 #include <linux/input/pmic8xxx-pwrkey.h>
 
+<<<<<<< HEAD
 #ifdef CONFIG_TOUCH_WAKE
 #include <linux/touch_wake.h>
+=======
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+#include <linux/input/sweep2wake.h>
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 #endif
 
 #define PON_CNTL_1 0x1C
@@ -197,6 +202,11 @@ static int __devinit pmic8xxx_pwrkey_probe(struct platform_device *pdev)
 		input_report_key(pwrkey->pwr, KEY_POWER, 1);
 		input_sync(pwrkey->pwr);
 	}
+
+#ifdef CONFIG_TOUCHSCREEN_SWEEP2WAKE
+	sweep2wake_setdev(pwr);
+	printk(KERN_INFO "[sweep2wake]: set device %s\n", pwr->name);
+#endif
 
 	err = request_any_context_irq(key_press_irq, pwrkey_press_irq,
 		IRQF_TRIGGER_RISING, "pmic8xxx_pwrkey_press", pwrkey);

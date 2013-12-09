@@ -265,7 +265,11 @@ config SCSI_SCAN_ASYNC
 
 config SCSI_WAIT_SCAN
 	tristate  # No prompt here, this is an invisible symbol.
+<<<<<<< HEAD
 	default y
+=======
+	default n
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 	depends on SCSI
 	depends on MODULES
 # scsi_wait_scan is a loadable module which waits until all the async scans are

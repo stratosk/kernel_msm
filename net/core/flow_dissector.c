@@ -35,8 +35,11 @@ again:
 		struct iphdr _iph;
 ip:
 		iph = skb_header_pointer(skb, nhoff, sizeof(_iph), &_iph);
+<<<<<<< HEAD
 
 		/* CVE-2013-4348 issue : make sure iph->ihl is not zero ... */
+=======
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 		if (!iph || iph->ihl < 5)
 			return false;
 

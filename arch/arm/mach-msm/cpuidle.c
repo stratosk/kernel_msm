@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,7 +14,6 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/cpuidle.h>
-#include <linux/cpu_pm.h>
 
 #include <mach/cpuidle.h>
 
@@ -87,6 +86,10 @@ static int msm_cpuidle_enter(
 		}
 	}
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> hellsgodb/android-msm-mako-3.4-kitkat-mr0
 	local_irq_enable();
 
 	return ret;
