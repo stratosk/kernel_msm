@@ -49,8 +49,7 @@ static void thermal_trig_early_suspend(struct early_suspend *h)
 	if (!thermal_data->active)
 		return;
 
-	cancel_delayed_work(&thermal_data->work);
-	flush_scheduled_work();
+	cancel_delayed_work_sync(&thermal_data->work);
 
 	if (thermal_data->brightness)
 		led_trigger_event(&thermal_led_trigger, LED_OFF);
@@ -102,8 +101,7 @@ static void thermal_trig_deactivate(struct led_classdev *led_cdev)
 	struct thermal_trig_data *thermal_data = led_cdev->trigger_data;
 
 	if (thermal_data) {
-		cancel_delayed_work(&thermal_data->work);
-		flush_scheduled_work();
+		cancel_delayed_work_sync(&thermal_data->work);
 
 		thermal_data->active = 0;
 		led_set_brightness(led_cdev, LED_OFF);

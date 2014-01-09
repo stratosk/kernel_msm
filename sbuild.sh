@@ -1,15 +1,12 @@
 #!/bin/bash
 
-BASE_SEMA_VER="Semaphore_N4_1.8.8"
+BASE_SEMA_VER="Semaphore_N4_2.0.0"
 VER=""
 SEMA_VER=$BASE_SEMA_VER$VER
 
 #export KBUILD_BUILD_VERSION="2"
 export LOCALVERSION="-"`echo $SEMA_VER`
-#export CROSS_COMPILE=/opt/toolchains/gcc-linaro-arm-linux-gnueabihf-4.8-2013.06_linux/bin/arm-linux-gnueabihf-
 export CROSS_COMPILE=/opt/toolchains/gcc-linaro-arm-linux-gnueabihf-4.7-2013.04-20130415_linux/bin/arm-linux-gnueabihf-
-#export CROSS_COMPILE=/opt/toolchains/gcc-linaro-arm-linux-gnueabihf-4.8-2013.04-20130417_linux/bin/arm-linux-gnueabihf-
-#export CROSS_COMPILE=../arm-linux-androideabi-4.7/bin/arm-linux-androideabi-
 export ARCH=arm
 export SUBARCH=arm
 export KBUILD_BUILD_USER=stratosk
@@ -20,10 +17,8 @@ echo "Making semaphore_mako_defconfig"
 
 DATE_START=$(date +"%s")
 
-#make "mako_defconfig"
 make "semaphore_mako_defconfig"
 
-#eval $(grep CONFIG_INITRAMFS_SOURCE .config)
 INIT_DIR=../mako_initramfs_4.3
 MODULES_DIR=../mako_initramfs_4.3/lib/modules
 KERNEL_DIR=`pwd`
@@ -41,7 +36,6 @@ echo "OUTPUT_DIR="$OUTPUT_DIR
 echo "CWM_DIR="$CWM_DIR
 echo "CWN_ANY_DIR="$CWM_ANY_DIR
 
-#make -j16 modules
 make -j16 > /dev/null
 
 rm `echo $MODULES_DIR"/*"`
@@ -51,14 +45,6 @@ find $KERNEL_DIR -name '*.ko' -exec cp -v {} ../$CWM_ANY_DIR"kernel/lib/modules/
 cd $INIT_DIR
 find . \( ! -regex '.*/\..*' \) | cpio -o -H newc -R root:root | gzip -9 > ../initrd.img
 cd  $KERNEL_DIR
-
-#make -j16 zImage
-
-#cd arch/arm/boot
-#tar cvf `echo $SEMA_VER`.tar zImage
-#mv `echo $SEMA_VER`.tar ../../../$OUTPUT_DIR$VARIANT
-#echo "Moving to "$OUTPUT_DIR$VARIANT"/"
-#cd ../../../
 
 cp arch/arm/boot/zImage ../boot.img
 cp arch/arm/boot/zImage ../$CWM_ANY_DIR/kernel/

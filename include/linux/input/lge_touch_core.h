@@ -24,6 +24,23 @@
 #define MAX_FINGER	10
 #define MAX_BUTTON	4
 
+#ifdef CONFIG_DOUBLETAP_WAKE
+
+#define DTW_MAX_INTERVAL	(600)
+#define DTW_TOUCH_AREA		(350)
+
+struct double_tap_wake {
+	unsigned int enabled;
+	unsigned int pending_status;
+	unsigned int pending;
+	unsigned int max_interval;
+	unsigned int hits;
+	int touch_id;
+	unsigned long time;
+	struct mutex lock;
+};
+#endif
+
 struct touch_device_caps {
 	u8              button_support;
 	u16             y_button_boundary;
@@ -221,6 +238,9 @@ struct lge_touch_data {
 	struct power_supply             touch_psy;
 	struct work_struct              work_charger;
 #endif
+#ifdef CONFIG_DOUBLETAP_WAKE
+	struct double_tap_wake		dt_wake;
+#endif
 };
 
 struct touch_device_driver {
@@ -371,7 +391,6 @@ enum {
 #define LGE_TOUCH_NAME		"lge_touch"
 
 /* Debug Mask setting */
-#define TOUCH_DEBUG_PRINT       (1)
 #define TOUCH_ERROR_PRINT       (1)
 #define TOUCH_INFO_PRINT        (1)
 
