@@ -1639,6 +1639,12 @@ config USERSPACE_VOLTAGE_CONTROL
 	help
 	  Userspace Voltage Control
 
+config CPU_OVERCLOCK
+	bool "Enable CPU Overclocking option for krait"
+	default n
+	help
+	  CPU OC to 1.836Ghz
+
 config GPU_OVERCLOCK
 	bool "Enable GPU Overclocking option"
 	default n

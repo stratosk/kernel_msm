@@ -1,24 +1,4 @@
 /*
- * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
- *
- * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
- *
- *
- * Permission to use, copy, modify, and/or distribute this software for
- * any purpose with or without fee is hereby granted, provided that the
- * above copyright notice and this permission notice appear in all
- * copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
- * WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
- * AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
- * DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR
- * PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
- * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
- * PERFORMANCE OF THIS SOFTWARE.
- */
-/*
  * Copyright (c) 2012, The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
@@ -52,10 +32,18 @@
  *
  */
 
+#if (WNI_POLARIS_FW_PRODUCT == AP)
+#include "wniCfgAp.h"
+#else
 #include "wniCfgSta.h"
+#endif
 #include "aniGlobal.h"
 #include "cfgApi.h"
 #include "schApi.h"
+#include "wniCfgAp.h"
+#ifdef FEATURE_WLAN_NON_INTEGRATED_SOC
+#include "halCommonApi.h"
+#endif
 #include "utilsApi.h"
 #include "limTypes.h"
 #include "limUtils.h"
@@ -121,7 +109,7 @@ limProcessBeaconFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,tpPESession ps
         if(eHAL_STATUS_SUCCESS != palAllocateMemory(pMac->hHdd, 
                                                     (void **)&pBeacon, sizeof(tSchBeaconStruct)))
         {
-            limLog(pMac, LOGE, FL("Unable to PAL allocate memory in limProcessBeaconFrame") );
+            limLog(pMac, LOGE, FL("Unable to PAL allocate memory in limProcessBeaconFrame\n") );
             return;
         }
 
@@ -132,23 +120,13 @@ limProcessBeaconFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,tpPESession ps
             // Received wrongly formatted/invalid Beacon.
             // Ignore it and move on.
             limLog(pMac, LOGW,
-                   FL("Received invalid Beacon in state %X"),
+                   FL("Received invalid Beacon in state %X\n"),
                    psessionEntry->limMlmState);
             limPrintMlmState(pMac, LOGW,  psessionEntry->limMlmState);
             palFreeMemory(pMac->hHdd, pBeacon);
             return;
         }
 
-        /*during scanning, when any session is active, and beacon/Pr belongs to
-          one of the session, fill up the following, TBD - HB couter */
-        if ((!psessionEntry->lastBeaconDtimPeriod) &&
-            (sirCompareMacAddr( psessionEntry->bssId, pBeacon->bssid)))
-        {
-            palCopyMemory( pMac->hHdd, ( tANI_U8* )&psessionEntry->lastBeaconTimeStamp, ( tANI_U8* )pBeacon->timeStamp, sizeof(tANI_U64) );
-            psessionEntry->lastBeaconDtimCount = pBeacon->tim.dtimCount;
-            psessionEntry->lastBeaconDtimPeriod= pBeacon->tim.dtimPeriod;
-            psessionEntry->currentBssBeaconCnt++;
-        }
 
         MTRACE(macTrace(pMac, TRACE_CODE_RX_MGMT_TSF, 0, pBeacon->timeStamp[0]);)
         MTRACE(macTrace(pMac, TRACE_CODE_RX_MGMT_TSF, 0, pBeacon->timeStamp[1]);)
@@ -157,22 +135,30 @@ limProcessBeaconFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,tpPESession ps
         if ((pMac->lim.gLimMlmState  == eLIM_MLM_WT_PROBE_RESP_STATE) ||
             (pMac->lim.gLimMlmState  == eLIM_MLM_PASSIVE_SCAN_STATE))
         {
+#ifdef WLAN_FEATURE_P2P
             //If we are scanning for P2P, only accept probe rsp
             if((pMac->lim.gLimHalScanState != eLIM_HAL_SCANNING_STATE) || (NULL == pMac->lim.gpLimMlmScanReq) 
                || !pMac->lim.gpLimMlmScanReq->p2pSearch )
+#endif
             {
                 limCheckAndAddBssDescription(pMac, pBeacon, pRxPacketInfo, 
                        ((pMac->lim.gLimHalScanState == eLIM_HAL_SCANNING_STATE) ? eANI_BOOLEAN_TRUE : eANI_BOOLEAN_FALSE), 
                        eANI_BOOLEAN_FALSE);
-
             }
-            /* Calling dfsChannelList which will convert DFS channel
-             * to Active channel for x secs if this channel is DFS channel */
-             limSetDFSChannelList(pMac, pBeacon->channelNumber,
-                                    &pMac->lim.dfschannelList);
         }
         else if (pMac->lim.gLimMlmState == eLIM_MLM_LEARN_STATE)
         {
+#if (WNI_POLARIS_FW_PRODUCT == AP) && (WNI_POLARIS_FW_PACKAGE == ADVANCED)
+            // STA/AP is in learn mode
+            /* Not sure whether the below 2 lines are needed for the station. TODO If yes, this should be 
+             * uncommented. Also when we tested enabling this, there is a crash as soon as the station
+             * comes up which needs to be fixed*/
+            //if (pMac->lim.gLimSystemRole == eLIM_STA_ROLE)
+              //  limCheckAndAddBssDescription(pMac, pBeacon, pRxPacketInfo, eANI_BOOLEAN_TRUE);
+            limCollectMeasurementData(pMac, pRxPacketInfo, pBeacon);
+           PELOG3(limLog(pMac, LOG3, FL("Parsed WDS info in Beacon frames: wdsLength=%d\n"),
+               pBeacon->propIEinfo.wdsLength);)
+#endif
         }
         else
         {
@@ -219,7 +205,7 @@ limProcessBeaconFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,tpPESession ps
         }
         else
         {
-            PELOG1(limLog(pMac, LOG1, FL("Received Beacon in unexpected state %d"),
+            PELOG1(limLog(pMac, LOG1, FL("Received Beacon in unexpected state %d\n"),
                    psessionEntry->limMlmState);
             limPrintMlmState(pMac, LOG1, psessionEntry->limMlmState);)
 #ifdef WLAN_DEBUG                    
@@ -270,14 +256,14 @@ limProcessBeaconFrameNoSession(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo)
         if(eHAL_STATUS_SUCCESS != palAllocateMemory(pMac->hHdd, 
                                                     (void **)&pBeacon, sizeof(tSchBeaconStruct)))
         {
-            limLog(pMac, LOGE, FL("Unable to PAL allocate memory in limProcessBeaconFrameNoSession") );
+            limLog(pMac, LOGE, FL("Unable to PAL allocate memory in limProcessBeaconFrameNoSession\n") );
             return;
         }
 
         if (sirConvertBeaconFrame2Struct(pMac, (tANI_U8 *) pRxPacketInfo, pBeacon) != eSIR_SUCCESS)
         {
             // Received wrongly formatted/invalid Beacon. Ignore and move on. 
-            limLog(pMac, LOGW, FL("Received invalid Beacon in global MLM state %X"), pMac->lim.gLimMlmState);
+            limLog(pMac, LOGW, FL("Received invalid Beacon in global MLM state %X\n"), pMac->lim.gLimMlmState);
             limPrintMlmState(pMac, LOGW,  pMac->lim.gLimMlmState);
             palFreeMemory(pMac->hHdd, pBeacon);
             return;
@@ -286,25 +272,34 @@ limProcessBeaconFrameNoSession(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo)
         if ( (pMac->lim.gLimMlmState == eLIM_MLM_WT_PROBE_RESP_STATE) ||
              (pMac->lim.gLimMlmState == eLIM_MLM_PASSIVE_SCAN_STATE) )
         {
+#ifdef WLAN_FEATURE_P2P
             //If we are scanning for P2P, only accept probe rsp
             if((pMac->lim.gLimHalScanState != eLIM_HAL_SCANNING_STATE) || (NULL == pMac->lim.gpLimMlmScanReq) 
                || !pMac->lim.gpLimMlmScanReq->p2pSearch )
+#endif
             {
                 limCheckAndAddBssDescription(pMac, pBeacon, pRxPacketInfo, eANI_BOOLEAN_TRUE, eANI_BOOLEAN_FALSE);
             }
-            /* Calling dfsChannelList which will convert DFS channel
-             * to Active channel for x secs if this channel is DFS channel */
-            limSetDFSChannelList(pMac, pBeacon->channelNumber,
-                                    &pMac->lim.dfschannelList);
         }
         else if (pMac->lim.gLimMlmState == eLIM_MLM_LEARN_STATE)
         {
+#if (WNI_POLARIS_FW_PRODUCT == AP) && (WNI_POLARIS_FW_PACKAGE == ADVANCED)
+            // STA/AP is in learn mode
+            /* Not sure whether the below 2 lines are needed for the station. TODO If yes, this should be 
+             * uncommented. Also when we tested enabling this, there is a crash as soon as the station
+             * comes up which needs to be fixed*/
+            //if (pMac->lim.gLimSystemRole == eLIM_STA_ROLE)
+              //  limCheckAndAddBssDescription(pMac, pBeacon, pRxPacketInfo, eANI_BOOLEAN_TRUE);
+            limCollectMeasurementData(pMac, pRxPacketInfo, pBeacon);
+            limLog(pMac, LOG3, FL("Parsed WDS info in Beacon frames: wdsLength=%d\n"),
+               pBeacon->propIEinfo.wdsLength);
+#endif
         }  // end of eLIM_MLM_LEARN_STATE)       
         palFreeMemory(pMac->hHdd, pBeacon);
     } // end of (eLIM_MLM_WT_PROBE_RESP_STATE) || (eLIM_MLM_PASSIVE_SCAN_STATE)
     else
     {
-        limLog(pMac, LOG1, FL("Rcvd Beacon in unexpected MLM state %d"), pMac->lim.gLimMlmState);
+        limLog(pMac, LOG1, FL("Rcvd Beacon in unexpected MLM state %d\n"), pMac->lim.gLimMlmState);
         limPrintMlmState(pMac, LOG1, pMac->lim.gLimMlmState);
 #ifdef WLAN_DEBUG                    
         pMac->lim.gLimUnexpBcnCnt++;

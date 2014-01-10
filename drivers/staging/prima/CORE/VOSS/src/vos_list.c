@@ -1,24 +1,4 @@
 /*
- * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
- *
- * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
- *
- *
- * Permission to use, copy, modify, and/or distribute this software for
- * any purpose with or without fee is hereby granted, provided that the
- * above copyright notice and this permission notice appear in all
- * copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
- * WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
- * AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
- * DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR
- * PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
- * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
- * PERFORMANCE OF THIS SOFTWARE.
- */
-/*
  * Copyright (c) 2012, The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
@@ -79,14 +59,14 @@ VOS_STATUS vos_list_init( vos_list_t *pList )
    if ( pList == NULL)
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: NULL pointer passed in", __func__);
+                "%s: NULL pointer passed in", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( pList->cookie == VOS_LIST_COOKIE )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: already initialized list", __func__);
+                "%s: already initialized list", __FUNCTION__);
       return VOS_STATUS_E_BUSY;
    }
 
@@ -107,14 +87,14 @@ VOS_STATUS vos_list_destroy( vos_list_t *pList )
    if (pList == NULL)
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: NULL pointer passed in", __func__);
+                "%s: NULL pointer passed in", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( pList->cookie != VOS_LIST_COOKIE )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: list not initialized", __func__);
+                "%s: list not initialized", __FUNCTION__);
       return VOS_STATUS_E_INVAL;
    }
 
@@ -122,14 +102,14 @@ VOS_STATUS vos_list_destroy( vos_list_t *pList )
    if (rc)
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: unable to lock list", __func__);
+                "%s: unable to lock list", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( pList->count !=0 )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: list length not equal to zero", __func__);
+                "%s: list length not equal to zero", __FUNCTION__);
       mutex_unlock(&pList->lock);
       return VOS_STATUS_E_BUSY;
    }
@@ -149,14 +129,14 @@ VOS_STATUS vos_list_insert_front( vos_list_t *pList, vos_list_node_t *pNode )
    if ( ( pList == NULL) || ( pNode == NULL) )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: NULL pointer passed in", __func__);
+                "%s: NULL pointer passed in", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( pList->cookie != VOS_LIST_COOKIE )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: list not initialized", __func__);
+                "%s: list not initialized", __FUNCTION__);
       return VOS_STATUS_E_INVAL;
    }
 
@@ -164,7 +144,7 @@ VOS_STATUS vos_list_insert_front( vos_list_t *pList, vos_list_node_t *pNode )
    if (rc)
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: unable to lock list", __func__);
+                "%s: unable to lock list", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
@@ -183,14 +163,14 @@ VOS_STATUS vos_list_insert_back( vos_list_t *pList, vos_list_node_t *pNode )
    if ( ( pList == NULL) || ( pNode == NULL) )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: NULL pointer passed in", __func__);
+                "%s: NULL pointer passed in", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( pList->cookie != VOS_LIST_COOKIE )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: list not initialized", __func__);
+                "%s: list not initialized", __FUNCTION__);
       return VOS_STATUS_E_INVAL;
    }
 
@@ -198,7 +178,7 @@ VOS_STATUS vos_list_insert_back( vos_list_t *pList, vos_list_node_t *pNode )
    if (rc)
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: unable to lock list", __func__);
+                "%s: unable to lock list", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
@@ -217,14 +197,14 @@ VOS_STATUS vos_list_insert_back_size( vos_list_t *pList, vos_list_node_t *pNode,
    if ( ( pList == NULL) || ( pNode == NULL) || (pSize == NULL) )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: NULL pointer passed in", __func__);
+                "%s: NULL pointer passed in", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( pList->cookie != VOS_LIST_COOKIE )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: list not initialized", __func__);
+                "%s: list not initialized", __FUNCTION__);
       return VOS_STATUS_E_INVAL;
    }
 
@@ -232,7 +212,7 @@ VOS_STATUS vos_list_insert_back_size( vos_list_t *pList, vos_list_node_t *pNode,
    if (rc)
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: unable to lock list", __func__);
+                "%s: unable to lock list", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
@@ -256,14 +236,14 @@ VOS_STATUS vos_list_remove_front( vos_list_t *pList, vos_list_node_t **ppNode )
    if ( ( pList == NULL ) || ( ppNode == NULL) )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: NULL pointer passed in", __func__);
+                "%s: NULL pointer passed in", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( pList->cookie != VOS_LIST_COOKIE )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: list not initialized", __func__);
+                "%s: list not initialized", __FUNCTION__);
       return VOS_STATUS_E_INVAL;
    }
 
@@ -271,14 +251,14 @@ VOS_STATUS vos_list_remove_front( vos_list_t *pList, vos_list_node_t **ppNode )
    if (rc)
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: unable to lock list", __func__);
+                "%s: unable to lock list", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( list_empty( &pList->anchor ) )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO_HIGH,
-                "%s: list empty", __func__);
+                "%s: list empty", __FUNCTION__);
       mutex_unlock(&pList->lock);
       return VOS_STATUS_E_EMPTY;
    }
@@ -306,14 +286,14 @@ VOS_STATUS vos_list_remove_back( vos_list_t *pList, vos_list_node_t **ppNode )
    if ( ( pList == NULL ) || ( ppNode == NULL) )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: NULL pointer passed in", __func__);
+                "%s: NULL pointer passed in", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( pList->cookie != VOS_LIST_COOKIE )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: list not initialized", __func__);
+                "%s: list not initialized", __FUNCTION__);
       return VOS_STATUS_E_INVAL;
    }
 
@@ -321,14 +301,14 @@ VOS_STATUS vos_list_remove_back( vos_list_t *pList, vos_list_node_t **ppNode )
    if (rc)
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: unable to lock list", __func__);
+                "%s: unable to lock list", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( list_empty( &pList->anchor ) )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_WARN,
-                "%s: list empty", __func__);
+                "%s: list empty", __FUNCTION__);
       mutex_unlock(&pList->lock);
       return VOS_STATUS_E_EMPTY;
    }
@@ -351,14 +331,14 @@ VOS_STATUS vos_list_size( vos_list_t *pList, v_SIZE_t *pSize )
    if ( ( pList ==NULL) || ( pSize == NULL) )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: NULL pointer passed in", __func__);
+                "%s: NULL pointer passed in", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( pList->cookie != VOS_LIST_COOKIE )
    {
        VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                 "%s: list not initialized", __func__);
+                 "%s: list not initialized", __FUNCTION__);
        return VOS_STATUS_E_INVAL;
    }
 
@@ -366,7 +346,7 @@ VOS_STATUS vos_list_size( vos_list_t *pList, v_SIZE_t *pSize )
    if (rc)
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: unable to lock list", __func__);
+                "%s: unable to lock list", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
@@ -413,14 +393,14 @@ VOS_STATUS vos_list_peek_front( vos_list_t *pList, vos_list_node_t **ppNode )
    if ( ( pList == NULL) || ( ppNode == NULL) )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: NULL pointer passed in", __func__);
+                "%s: NULL pointer passed in", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( pList->cookie != VOS_LIST_COOKIE )
    {
        VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                 "%s: list not initialized", __func__);
+                 "%s: list not initialized", __FUNCTION__);
        return VOS_STATUS_E_INVAL;
    }
 
@@ -428,14 +408,14 @@ VOS_STATUS vos_list_peek_front( vos_list_t *pList, vos_list_node_t **ppNode )
    if (rc)
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: unable to lock list", __func__);
+                "%s: unable to lock list", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( list_empty(&pList->anchor) )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_WARN,
-                "%s: list empty", __func__);
+                "%s: list empty", __FUNCTION__);
       mutex_unlock(&pList->lock);
       return VOS_STATUS_E_EMPTY;
    }
@@ -483,14 +463,14 @@ VOS_STATUS vos_list_peek_back( vos_list_t *pList, vos_list_node_t **ppNode )
    if ( ( pList == NULL) || ( ppNode == NULL) )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: NULL pointer passed in", __func__);
+                "%s: NULL pointer passed in", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( pList->cookie != VOS_LIST_COOKIE )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: list not initialized", __func__);
+                "%s: list not initialized", __FUNCTION__);
       return VOS_STATUS_E_INVAL;
    }
 
@@ -498,14 +478,14 @@ VOS_STATUS vos_list_peek_back( vos_list_t *pList, vos_list_node_t **ppNode )
    if (rc)
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: unable to lock list", __func__);
+                "%s: unable to lock list", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( list_empty(&pList->anchor) )
    {
        VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_WARN,
-                 "%s: list empty", __func__);
+                 "%s: list empty", __FUNCTION__);
        mutex_unlock(&pList->lock);
        return VOS_STATUS_E_EMPTY;
    }
@@ -556,14 +536,14 @@ VOS_STATUS vos_list_peek_next( vos_list_t *pList, vos_list_node_t *pNode,
    if ( ( pList == NULL) || ( pNode == NULL) || (ppNode == NULL))
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: NULL pointer passed in", __func__);
+                "%s: NULL pointer passed in", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( pList->cookie != VOS_LIST_COOKIE )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: list not initialized", __func__);
+                "%s: list not initialized", __FUNCTION__);
       return VOS_STATUS_E_INVAL;
    }
 
@@ -571,14 +551,14 @@ VOS_STATUS vos_list_peek_next( vos_list_t *pList, vos_list_node_t *pNode,
    if (rc)
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: unable to lock list", __func__);
+                "%s: unable to lock list", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( list_empty(&pList->anchor) )
    {
        VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
-                 "%s: list empty", __func__);
+                 "%s: list empty", __FUNCTION__);
        mutex_unlock(&pList->lock);
        return VOS_STATUS_E_EMPTY;
    }
@@ -599,7 +579,7 @@ VOS_STATUS vos_list_peek_next( vos_list_t *pList, vos_list_node_t *pNode,
    if (listptr == &pList->anchor)
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
-                "%s: list empty", __func__);
+                "%s: list empty", __FUNCTION__);
       mutex_unlock(&pList->lock);
       return VOS_STATUS_E_EMPTY;
    }
@@ -650,14 +630,14 @@ VOS_STATUS vos_list_peek_prev( vos_list_t *pList, vos_list_node_t *pNode,
    if ( ( pList == NULL) || ( pNode == NULL) || (ppNode == NULL) )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: NULL pointer passed in", __func__);
+                "%s: NULL pointer passed in", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( pList->cookie != VOS_LIST_COOKIE )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: list not initialized", __func__);
+                "%s: list not initialized", __FUNCTION__);
       return VOS_STATUS_E_INVAL;
    }
 
@@ -665,14 +645,14 @@ VOS_STATUS vos_list_peek_prev( vos_list_t *pList, vos_list_node_t *pNode,
    if (rc)
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: unable to lock list", __func__);
+                "%s: unable to lock list", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( list_empty(&pList->anchor) )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_WARN,
-                "%s: list empty", __func__);
+                "%s: list empty", __FUNCTION__);
       mutex_unlock(&pList->lock);
       return VOS_STATUS_E_EMPTY;
    }
@@ -694,7 +674,7 @@ VOS_STATUS vos_list_peek_prev( vos_list_t *pList, vos_list_node_t *pNode,
    if (listptr == &pList->anchor)
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_WARN,
-                "%s: list empty", __func__);
+                "%s: list empty", __FUNCTION__);
       mutex_unlock(&pList->lock);
       return VOS_STATUS_E_EMPTY;
    }
@@ -741,13 +721,13 @@ VOS_STATUS vos_list_insert_before( vos_list_t *pList, vos_list_node_t *pNodeToIn
    if ( ( pList == NULL) || ( pNode == NULL) || (pNodeToInsert == NULL))
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: NULL pointer passed in", __func__);
+                "%s: NULL pointer passed in", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( pList->cookie != VOS_LIST_COOKIE )
    {
-      VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR, "%s: list not initialized", __func__);
+      VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR, "%s: list not initialized", __FUNCTION__);
       return VOS_STATUS_E_INVAL;
    }
 
@@ -755,13 +735,13 @@ VOS_STATUS vos_list_insert_before( vos_list_t *pList, vos_list_node_t *pNodeToIn
    if (rc)
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: unable to lock list", __func__);
+                "%s: unable to lock list", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( list_empty(&pList->anchor) )
    {
-      VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR, "%s: list empty", __func__);
+      VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR, "%s: list empty", __FUNCTION__);
       mutex_unlock(&pList->lock);
       return VOS_STATUS_E_EMPTY;
    }
@@ -821,14 +801,14 @@ VOS_STATUS vos_list_insert_after( vos_list_t *pList, vos_list_node_t *pNodeToIns
    if ( ( pList == NULL) || ( pNode == NULL) || (pNodeToInsert == NULL))
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: NULL pointer passed in", __func__);
+                "%s: NULL pointer passed in", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( pList->cookie != VOS_LIST_COOKIE )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: list not initialized", __func__);
+                "%s: list not initialized", __FUNCTION__);
       return VOS_STATUS_E_INVAL;
    }
 
@@ -836,7 +816,7 @@ VOS_STATUS vos_list_insert_after( vos_list_t *pList, vos_list_node_t *pNodeToIns
    if (rc)
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: unable to lock list", __func__);
+                "%s: unable to lock list", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
@@ -844,7 +824,7 @@ VOS_STATUS vos_list_insert_after( vos_list_t *pList, vos_list_node_t *pNodeToIns
    if ( list_empty(&pList->anchor) )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: list empty", __func__);
+                "%s: list empty", __FUNCTION__);
       mutex_unlock(&pList->lock);
       return VOS_STATUS_E_EMPTY;
    }
@@ -902,14 +882,14 @@ VOS_STATUS vos_list_remove_node( vos_list_t *pList, vos_list_node_t *pNodeToRemo
    if ( ( pList == NULL ) || ( pNodeToRemove == NULL) )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: NULL pointer passed in", __func__);
+                "%s: NULL pointer passed in", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( pList->cookie != VOS_LIST_COOKIE )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: list not initialized", __func__);
+                "%s: list not initialized", __FUNCTION__);
       return VOS_STATUS_E_INVAL;
    }
 
@@ -917,14 +897,14 @@ VOS_STATUS vos_list_remove_node( vos_list_t *pList, vos_list_node_t *pNodeToRemo
    if (rc)
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: unable to lock list", __func__);
+                "%s: unable to lock list", __FUNCTION__);
       return VOS_STATUS_E_FAULT;
    }
 
    if ( list_empty(&pList->anchor) )
    {
       VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                "%s: list empty", __func__);
+                "%s: list empty", __FUNCTION__);
       mutex_unlock(&pList->lock);
       return VOS_STATUS_E_EMPTY;
    }
