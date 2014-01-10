@@ -1365,6 +1365,17 @@ static struct msm_thermal_data msm_thermal_pdata = {
 	.allowed_low_high = 79,
 	.allowed_low_low = 73,
 	.allowed_low_freq = 1350000,
+#ifdef CONFIG_INTELLI_THERMAL
+	.freq_control_mask = 0xf, 
+	.core_limit_temp_degC = 80,
+	.core_temp_hysteresis_degC = 10, 
+	.core_control_mask = 0xe, 
+#ifdef CONFIG_CPU_OVERCLOCK
+	.limit_temp_degC = 75,
+#else
+	.limit_temp_degC = 60,
+#endif
+#endif
 };
 
 #define MSM_SHARED_RAM_PHYS 0x80000000
