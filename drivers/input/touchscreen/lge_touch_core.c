@@ -2185,6 +2185,9 @@ err_lge_touch_sys_class_register:
 		gpio_free(ts->pdata->int_pin);
 		free_irq(ts->client->irq, ts);
 	}
+#ifdef CONFIG_DOUBLETAP_WAKE	
+	wake_lock_destroy(&ts->dt_wake.wlock);
+#endif
 err_interrupt_failed:
 	input_unregister_device(ts->input_dev);
 err_input_register_device_failed:
@@ -2213,6 +2216,9 @@ static int touch_remove(struct i2c_client *client)
 
 	device_init_wakeup(&client->dev, 0);
 
+#ifdef CONFIG_DOUBLETAP_WAKE
+	wake_lock_destroy(&ts->dt_wake.wlock);
+#endif	
 	/* Specific device remove */
 	if (touch_device_func->remove)
 		touch_device_func->remove(ts->client);
@@ -2257,6 +2263,7 @@ static void touch_power_on(struct lge_touch_data *ts)
 	if (ts->dt_wake.enabled) {
 		wake_unlock(&ts->dt_wake.wlock);
 		disable_irq_wake(ts->client->irq);
+		release_all_ts_event(ts);
 	} else {
 #endif
 		touch_power_cntl(ts, ts->pdata->role->resume_pwr);

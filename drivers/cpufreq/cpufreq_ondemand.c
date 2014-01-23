@@ -18,7 +18,6 @@
 #include <linux/jiffies.h>
 #include <linux/kernel_stat.h>
 #include <linux/mutex.h>
-#include <linux/earlysuspend.h>
 #include <linux/hrtimer.h>
 #include <linux/tick.h>
 #include <linux/ktime.h>
@@ -929,23 +928,6 @@ static struct input_handler dbs_input_handler = {
 	.id_table	= dbs_ids,
 };
 
-static void dbs_late_resume(struct early_suspend *h)
-{
-	int ret;
-	ret = input_register_handler(&dbs_input_handler);
-}
-
-static void dbs_early_suspend(struct early_suspend *h)
-{
-	input_unregister_handler(&dbs_input_handler);
-}
-
-static struct early_suspend dbs_suspend_data = {
-	.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN,
-	.suspend = dbs_early_suspend,
-	.resume = dbs_late_resume,
-};
-
 static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 				   unsigned int event)
 {
@@ -1006,10 +988,8 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 				    latency * LATENCY_MULTIPLIER);
 			dbs_tuners_ins.io_is_busy = io_busy;
 		}
-		if (!cpu) {
+		if (!cpu)
 			rc = input_register_handler(&dbs_input_handler);
-			register_early_suspend(&dbs_suspend_data);
-		}
 		mutex_unlock(&dbs_mutex);
 
 
@@ -1029,10 +1009,8 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 		/* If device is being removed, policy is no longer
 		 * valid. */
 		this_dbs_info->cur_policy = NULL;
-		if (!cpu) {
-			unregister_early_suspend(&dbs_suspend_data);
+		if (!cpu)
 			input_unregister_handler(&dbs_input_handler);
-		}
 		mutex_unlock(&dbs_mutex);
 		if (!dbs_enable)
 			sysfs_remove_group(cpufreq_global_kobject,
