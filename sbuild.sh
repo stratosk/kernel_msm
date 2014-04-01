@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BASE_SEMA_VER="Semaphore_N4_2.0.5"
+BASE_SEMA_VER="Semaphore_N4_2.0.9"
 VER=""
 SEMA_VER=$BASE_SEMA_VER$VER
 
@@ -36,7 +36,7 @@ echo "OUTPUT_DIR="$OUTPUT_DIR
 echo "CWM_DIR="$CWM_DIR
 echo "CWN_ANY_DIR="$CWM_ANY_DIR
 
-make -j16 > /dev/null
+make -j8 > /dev/null
 
 rm `echo $MODULES_DIR"/*"`
 rm `echo ../$CWM_ANY_DIR"system/lib/modules/*"`
