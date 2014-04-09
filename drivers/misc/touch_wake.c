@@ -84,9 +84,9 @@ static void touchwake_early_suspend(struct early_suspend *h)
 		led_trigger_event(&touchwake_led_trigger, LED_FULL);
 		schedule_delayed_work(&touchoff_work,
 					msecs_to_jiffies(touchoff_delay));
-	} else
+	} else {
 		touchwake_disable_touch();
-
+	}
 out:
 	device_suspended = true;
 }
