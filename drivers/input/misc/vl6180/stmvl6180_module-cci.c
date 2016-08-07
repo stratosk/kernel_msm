@@ -83,7 +83,7 @@ static int stmvl6180_get_dt_data(struct device *dev, struct cci_data *data)
 
 	if (dev->of_node) {
 		struct device_node *of_node = dev->of_node;
-		struct msm_tof_vreg *vreg_cfg;
+		struct msm_tof_vreg *vreg_cfg = NULL;
 
 		if (!of_node) {
 			vl6180_errmsg("failed %d\n", __LINE__);
