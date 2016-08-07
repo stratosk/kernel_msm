@@ -3525,8 +3525,8 @@ out:
 static void smbchg_discharge_while_plugged_check(struct work_struct *work)
 {
 	int rc = 0;
-	u8 reg = 0, chg_type;
-	bool valid_chg_disabled, status_full, chg_inhibit;
+	u8 reg = 0, chg_type = 0;
+	bool valid_chg_disabled = false, status_full = false, chg_inhibit = false;
 	bool unused;
 	struct smbchg_chip *chip = container_of(work,
 					struct smbchg_chip,
@@ -6144,7 +6144,7 @@ static int smbchg_probe(struct spmi_device *spmi)
 	int rc;
 	struct smbchg_chip *chip;
 	struct power_supply *usb_psy;
-	struct qpnp_vadc_chip *vadc_dev;
+	struct qpnp_vadc_chip *vadc_dev = NULL;
 
 	usb_psy = power_supply_get_by_name("usb");
 	if (!usb_psy) {
