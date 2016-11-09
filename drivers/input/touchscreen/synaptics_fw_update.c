@@ -2327,9 +2327,9 @@ static void synaptics_rmi4_fwu_work(struct work_struct *work)
 static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 {
 	int retval;
-	unsigned char attr_count;
+	unsigned char attr_count = 0;
 	struct pdt_properties pdt_props;
-	struct dentry *temp;
+	struct dentry *temp = NULL;
 
 	fwu = kzalloc(sizeof(*fwu), GFP_KERNEL);
 	if (!fwu) {
