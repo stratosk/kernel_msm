@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -246,6 +246,8 @@
 #endif
 
 typedef v_U8_t tWlanHddMacAddr[HDD_MAC_ADDR_LEN];
+
+#define MAX_PROBE_REQ_OUIS 16
 
 /*
  * Generic asynchronous request/response support
@@ -1751,6 +1753,9 @@ struct hdd_context_s
     unsigned int last_scan_bug_report_timestamp;
     bool driver_being_stopped; /* Track if DRIVER STOP cmd is sent */
     uint8_t max_mc_addr_list;
+
+    uint32_t no_of_probe_req_ouis;
+    struct vendor_oui *probe_req_voui;
 };
 
 /*---------------------------------------------------------------------------
@@ -1930,10 +1935,6 @@ static inline void hdd_wlan_green_ap_del_sta(struct hdd_context_s *hdd_ctx) {}
 void wlan_hdd_cfg80211_stats_ext_init(hdd_context_t *pHddCtx);
 #endif
 
-#ifdef WLAN_FEATURE_LINK_LAYER_STATS
-void wlan_hdd_cfg80211_link_layer_stats_init(hdd_context_t *pHddCtx);
-#endif
-
 void hdd_update_macaddr(hdd_config_t *cfg_ini, v_MACADDR_t hw_macaddr);
 #if defined(FEATURE_WLAN_LFR) && defined(WLAN_FEATURE_ROAM_SCAN_OFFLOAD)
 void wlan_hdd_disable_roaming(hdd_adapter_t *pAdapter);
@@ -1980,12 +1981,27 @@ static inline void hdd_init_ll_stats_ctx(hdd_context_t *hdd_ctx)
 
 	return;
 }
+
+/**
+ * wlan_hdd_cfg80211_link_layer_stats_init() - Initialize llstats callbacks
+ * @pHddCtx: HDD context
+ *
+ * Return: none
+ */
+void wlan_hdd_cfg80211_link_layer_stats_init(hdd_context_t *pHddCtx);
+
 #else
 static inline bool hdd_link_layer_stats_supported(void)
 {
 	return false;
 }
+
 static inline void hdd_init_ll_stats_ctx(hdd_context_t *hdd_ctx)
+{
+	return;
+}
+
+void wlan_hdd_cfg80211_link_layer_stats_init(hdd_context_t *pHddCtx)
 {
 	return;
 }
