@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BASE_SEMA_VER="Semaphore_N5X_1.5.0"
+BASE_SEMA_VER="Semaphore_N5X_1.6.0"
 VER=""
 SEMA_VER=$BASE_SEMA_VER$VER
 
@@ -20,8 +20,8 @@ DATE_START=$(date +"%s")
 
 make "semaphore_bullhead_defconfig"
 
-INIT_DIR=../initramfs_nougat
-MODULES_DIR=../initramfs_nougat/lib/modules
+INIT_DIR=../initramfs_oreo
+MODULES_DIR=../initramfs_oreo/lib/modules
 KERNEL_DIR=`pwd`
 OUTPUT_DIR=output/
 CWM_DIR=cwm/
